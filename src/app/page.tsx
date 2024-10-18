@@ -1,101 +1,181 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useEffect, useContext } from "react";
+import {
+  CanvasContext,
+  CanvasProvider,
+  useCanvasStore,
+} from "../context/CanvasContext";
+import { MdPlayArrow, MdPause } from "react-icons/md";
+import { observer } from "mobx-react-lite";
+import { fabric } from "fabric";
+import { formatTimeToMinSecMili, isHtmlImageElement } from "@/utils";
+
+const CanvasPage = () => {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <CanvasProvider>
+      <div style={{ display: "flex" }}>
+        <Sidebar />
+        <CanvasArea />
+      </div>
+    </CanvasProvider>
+  );
+};
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+const CanvasArea = observer(() => {
+  // const canvasRef = useRef<HTMLCanvasElement>(null);
+  const store = useContext(CanvasContext);
+
+  useEffect(() => {
+    const canvas = new fabric.Canvas("canvas", {
+      height: 400,
+      width: 800,
+      backgroundColor: "white",
+    });
+
+    // Global settings for all fabric objects
+    fabric.Object.prototype.transparentCorners = false;
+    fabric.Object.prototype.cornerColor = "#2BEBC8";
+    fabric.Object.prototype.cornerStyle = "rect";
+    fabric.Object.prototype.cornerStrokeColor = "#2BEBC8";
+    fabric.Object.prototype.cornerSize = 6;
+
+    // setCanvasInstance(canvas);
+    store.setCanvas(canvas);
+    return () => {
+      canvas.dispose();
+    };
+  }, []);
+
+  // useEffect(() => {
+  //   if (canvasRef.current) {
+  //     store.initializeCanvas(canvasRef.current);
+  //   }
+
+  //   return () => {
+  //     store.disposeCanvas();
+  //   };
+  // }, [store]);
+
+  return (
+    <div>
+      {/* <canvas ref={canvasRef} /> */}
+      <canvas id="canvas" />
     </div>
   );
-}
+});
+
+const Sidebar = observer(() => {
+  const store = useCanvasStore();
+
+  const handleAddRectangle = () => {
+    store.addRectangle();
+  };
+
+  const handleAddImage = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+
+    input.onchange = (event) => {
+      const file = event.target.files[0];
+
+      if (file) {
+        const blobUrl = URL.createObjectURL(file);
+
+        store.addImageResource(blobUrl);
+
+        const img = document.createElement("img");
+        img.src = blobUrl;
+        const id = Math.floor(Math.random() * 1000);
+
+        img.id = `image-${id}`;
+        img.setAttribute("style", "width: 100%; height:auto; display:none");
+
+        img.onload = () => {
+          document.body.appendChild(img);
+          store.addImage(id);
+        };
+      } else {
+        console.log("No file selected.");
+      }
+    };
+
+    input.click();
+  };
+
+  const handleAddVideo = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/*";
+
+    input.onchange = (event) => {
+      const file = event.target.files[0];
+
+      if (file) {
+        const videoUrl = URL.createObjectURL(file);
+
+        store.addVideoResource(videoUrl);
+
+        const video = document.createElement("video");
+        video.src = videoUrl;
+        const id = Math.floor(Math.random() * 1000);
+
+        video.id = `video-${id}`;
+        video.setAttribute("style", "width: 100%; height:auto; display:none");
+        video.setAttribute("controls", "true"); // Add controls to the video
+
+        // Use the `loadeddata` event instead of `onload`
+        video.addEventListener("loadeddata", () => {
+          document.body.appendChild(video);
+          store.addVideo(id);
+        });
+      } else {
+        console.log("No file selected.");
+      }
+    };
+
+    input.click();
+  };
+
+  const handleAddAudio = () => {
+    const audioUrl = prompt("Enter audio URL") || "";
+    if (audioUrl) {
+      store.addAudio(audioUrl);
+    }
+  };
+  const Icon = store.playing ? MdPause : MdPlayArrow;
+  const formattedTime = formatTimeToMinSecMili(store.currentTimeInMs);
+  const formattedMaxTime = formatTimeToMinSecMili(store.maxTime);
+  return (
+    <div style={{ marginRight: "20px" }}>
+      <button onClick={handleAddRectangle}>Add Rectangle</button>
+      <br /> <button onClick={handleAddImage}>Add Image</button>
+      <br /> <button onClick={handleAddVideo}>Add Video</button>
+      <br /> <button onClick={handleAddAudio}>Add Audio</button>
+      <br />
+      <input
+        type="range"
+        min={0}
+        max={20000}
+        onChange={(e) => {
+          store.handleSeek(Number(e.target.value));
+        }}
+      />
+      <br />
+      <div className="w-[200px] bg-blue-800">{store.currentTimeInMs}</div>
+      <br />
+      <button
+        className="w-[80px] rounded  px-2 py-2"
+        onClick={() => {
+          store.setPlaying(!store.playing);
+        }}
+      >
+        <Icon size="40"></Icon>
+      </button>
+      <div>{formattedTime}</div>
+    </div>
+  );
+});
+
+export default CanvasPage;
