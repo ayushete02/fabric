@@ -78,7 +78,7 @@ const Sidebar = observer(() => {
     input.accept = "image/*";
 
     input.onchange = (event) => {
-      const file = event.target.files[0];
+      const file = (event.target as HTMLInputElement).files?.[0];
 
       if (file) {
         const blobUrl = URL.createObjectURL(file);
@@ -110,7 +110,7 @@ const Sidebar = observer(() => {
     input.accept = "video/*";
 
     input.onchange = (event) => {
-      const file = event.target.files[0];
+      const file = (event.target as HTMLInputElement).files?.[0];
 
       if (file) {
         const videoUrl = URL.createObjectURL(file);
@@ -139,11 +139,37 @@ const Sidebar = observer(() => {
   };
 
   const handleAddAudio = () => {
-    const audioUrl = prompt("Enter audio URL") || "";
-    if (audioUrl) {
-      store.addAudio(audioUrl);
-    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "audio/*";
+
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+
+      if (file) {
+        const audioUrl = URL.createObjectURL(file);
+
+        store.addAudioResource(audioUrl);
+
+        const audio = document.createElement("audio");
+        audio.src = audioUrl;
+        const id = Math.floor(Math.random() * 1000);
+
+        audio.id = `audio-${id}`;
+        audio.setAttribute("style", "display:none");
+
+        audio.addEventListener("loadeddata", () => {
+          document.body.appendChild(audio);
+          store.addAudio(id);
+        });
+      } else {
+        console.log("No file selected.");
+      }
+    };
+
+    input.click();
   };
+
   const Icon = store.playing ? MdPause : MdPlayArrow;
   const formattedTime = formatTimeToMinSecMili(store.currentTimeInMs);
   const formattedMaxTime = formatTimeToMinSecMili(store.maxTime);
