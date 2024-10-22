@@ -10,6 +10,9 @@ import { MdPlayArrow, MdPause } from "react-icons/md";
 import { observer } from "mobx-react-lite";
 import { fabric } from "fabric";
 import { formatTimeToMinSecMili, isHtmlImageElement } from "@/utils";
+import { isEditorImageElement, isEditorVideoElement } from "@/store/Store";
+import { EffectResource } from "./components/effects/EffectResource";
+import { AnimationsPanel } from "./components/animation/AnimationsPanel";
 
 const CanvasPage = () => {
   return (
@@ -67,6 +70,7 @@ const CanvasArea = observer(() => {
 
 const Sidebar = observer(() => {
   const store = useCanvasStore();
+  const selectedElement = store.selectedElement;
 
   const handleAddRectangle = () => {
     store.addRectangle();
@@ -174,7 +178,7 @@ const Sidebar = observer(() => {
   const formattedTime = formatTimeToMinSecMili(store.currentTimeInMs);
   const formattedMaxTime = formatTimeToMinSecMili(store.maxTime);
   return (
-    <div style={{ marginRight: "20px" }}>
+    <div className="w-[350px]">
       <button onClick={handleAddRectangle}>Add Rectangle</button>
       <br /> <button onClick={handleAddImage}>Add Image</button>
       <br /> <button onClick={handleAddVideo}>Add Video</button>
@@ -184,6 +188,7 @@ const Sidebar = observer(() => {
         type="range"
         min={0}
         max={20000}
+        value={store.currentTimeInMs}
         onChange={(e) => {
           store.handleSeek(Number(e.target.value));
         }}
@@ -200,6 +205,21 @@ const Sidebar = observer(() => {
         <Icon size="40"></Icon>
       </button>
       <div>{formattedTime}</div>
+      <br />
+      <br />
+      <>
+        <div className="text-sm px-[16px] pt-[16px] pb-[8px] font-semibold">
+          Effects
+        </div>
+        {selectedElement &&
+        (isEditorImageElement(selectedElement) ||
+          isEditorVideoElement(selectedElement)) ? (
+          <EffectResource editorElement={selectedElement} />
+        ) : null}
+      </>
+      <br />
+      <br />
+      <AnimationsPanel />
     </div>
   );
 });

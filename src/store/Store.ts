@@ -5,16 +5,20 @@ import { fabric } from "fabric";
 import {
   AudioEditorElement,
   EditorElement,
+  Effect,
+  ImageEditorElement,
   MenuOption,
   Placement,
   TimeFrame,
   VideoEditorElement,
 } from "@/fabric-types";
+import anime, { get } from "animejs";
 import {
   isHtmlAudioElement,
   isHtmlImageElement,
   isHtmlVideoElement,
 } from "@/utils";
+import { FabricUitls } from "@/utils/fabric-utils";
 
 export class Store {
   canvas: fabric.Canvas | null = null;
@@ -28,8 +32,8 @@ export class Store {
   selectedElement: EditorElement | null;
 
   maxTime: number;
-  // animations: Animation[];
-  // animationTimeLine: anime.AnimeTimelineInstance;
+  animations: Animation[];
+  animationTimeLine: anime.AnimeTimelineInstance;
   playing: boolean;
 
   currentKeyFrame: number;
@@ -49,8 +53,8 @@ export class Store {
     this.currentKeyFrame = 0;
     this.selectedElement = null;
     this.fps = 60;
-    // this.animations = [];
-    // this.animationTimeLine = anime.timeline();
+    this.animations = [];
+    this.animationTimeLine = anime.timeline();
     this.selectedMenuOption = "Video";
     this.selectedVideoFormat = "mp4";
     makeAutoObservable(this);
@@ -64,11 +68,421 @@ export class Store {
     this.currentKeyFrame = Math.floor((time / 1000) * this.fps);
   }
 
+  // setCanvas(canvas: fabric.Canvas | null) {
+  //   this.canvas = canvas;
+  //   if (canvas) {
+  //     canvas.backgroundColor = this.backgroundColor;
+  //   }
+  // }
+
   setCanvas(canvas: fabric.Canvas | null) {
     this.canvas = canvas;
     if (canvas) {
       canvas.backgroundColor = this.backgroundColor;
+
+      canvas.on("selection:created", (e) => {
+        this.handleSelection(e.selected);
+      });
+
+      canvas.on("selection:updated", (e) => {
+        this.handleSelection(e.selected);
+      });
+
+      canvas.on("selection:cleared", () => {
+        this.setSelectedElement(null);
+      });
     }
+  }
+
+  handleSelection(selectedObjects: fabric.Object[]) {
+    // For simplicity, handle single selection
+    const target = selectedObjects[0];
+    const selectedElement =
+      this.editorElements.find((element) => element.fabricObject === target) ??
+      null;
+    this.setSelectedElement(selectedElement);
+  }
+
+  setBackgroundColor(backgroundColor: string) {
+    this.backgroundColor = backgroundColor;
+    if (this.canvas) {
+      this.canvas.selection = true;
+      this.canvas.backgroundColor = backgroundColor;
+    }
+  }
+
+  addAnimation(animation: Animation) {
+    this.animations = [...this.animations, animation];
+    this.refreshAnimations();
+  }
+
+  updateAnimation(id: string, animation: Animation) {
+    const index = this.animations.findIndex((a) => a.id === id);
+    this.animations[index] = animation;
+    this.refreshAnimations();
+  }
+
+  removeAnimation(id: string) {
+    this.animations = this.animations.filter(
+      (animation) => animation.id !== id
+    );
+    this.refreshAnimations();
+  }
+
+  refreshAnimations() {
+    // anime.remove(this.animationTimeLine);
+    this.animations.forEach((animation) => {
+      const editorElement = this.editorElements.find(
+        (e) => e.id === animation.targetId
+      );
+      if (editorElement && editorElement.fabricObject) {
+        anime.remove(editorElement.fabricObject);
+      }
+    });
+    this.animationTimeLine = anime.timeline({
+      duration: this.maxTime,
+      autoplay: false,
+      update: () => {
+        this.canvas?.renderAll(); // Ensure Fabric.js re-renders on each update
+      },
+    });
+    for (let i = 0; i < this.animations.length; i++) {
+      const animation = this.animations[i];
+      const editorElement = this.editorElements.find(
+        (element) => element.id === animation.targetId
+      );
+      const fabricObject = editorElement?.fabricObject;
+      if (!editorElement || !fabricObject) {
+        console.warn(`Element with ID ${animation.targetId} not found.`);
+        continue;
+      }
+      fabricObject.clipPath = undefined;
+      console.log("Animating:", animation.type, fabricObject, editorElement);
+
+      switch (animation.type) {
+        case "fadeIn": {
+          this.animationTimeLine.add(
+            {
+              opacity: [0, 1],
+              duration: animation.duration,
+              targets: fabricObject,
+              easing: "linear",
+            },
+            editorElement.timeFrame.start
+          );
+          break;
+        }
+        case "fadeOut": {
+          this.animationTimeLine.add(
+            {
+              opacity: [1, 0],
+              duration: animation.duration,
+              targets: fabricObject,
+              easing: "linear",
+            },
+            editorElement.timeFrame.end - animation.duration
+          );
+          break;
+        }
+        case "slideIn": {
+          const direction = animation.properties.direction;
+          const targetPosition = {
+            left: editorElement.placement.x,
+            top: editorElement.placement.y,
+          };
+          const startPosition = {
+            left:
+              direction === "left"
+                ? -editorElement.placement.width
+                : direction === "right"
+                ? this.canvas?.width
+                : editorElement.placement.x,
+            top:
+              direction === "top"
+                ? -editorElement.placement.height
+                : direction === "bottom"
+                ? this.canvas?.height
+                : editorElement.placement.y,
+          };
+          if (animation.properties.useClipPath) {
+            const clipRectangle = FabricUitls.getClipMaskRect(
+              editorElement,
+              50
+            );
+            fabricObject.set("clipPath", clipRectangle);
+          }
+          if (
+            editorElement.type === "text" &&
+            animation.properties.textType === "character"
+          ) {
+            this.canvas?.remove(...editorElement.properties.splittedTexts);
+            // @ts-ignore
+            editorElement.properties.splittedTexts =
+              getTextObjectsPartitionedByCharacters(
+                // @ts-ignore
+                editorElement.fabricObject,
+                editorElement
+              );
+            editorElement.properties.splittedTexts.forEach((textObject) => {
+              this.canvas!.add(textObject);
+            });
+            const duration = animation.duration / 2;
+            const delay =
+              duration / editorElement.properties.splittedTexts.length;
+            for (
+              let i = 0;
+              i < editorElement.properties.splittedTexts.length;
+              i++
+            ) {
+              const splittedText = editorElement.properties.splittedTexts[i];
+              const offset = {
+                left: splittedText.left! - editorElement.placement.x,
+                top: splittedText.top! - editorElement.placement.y,
+              };
+              this.animationTimeLine.add(
+                {
+                  left: [
+                    startPosition.left! + offset.left,
+                    targetPosition.left + offset.left,
+                  ],
+                  top: [
+                    startPosition.top! + offset.top,
+                    targetPosition.top + offset.top,
+                  ],
+                  delay: i * delay,
+                  duration: duration,
+                  targets: splittedText,
+                },
+                editorElement.timeFrame.start
+              );
+            }
+            this.animationTimeLine.add(
+              {
+                opacity: [1, 0],
+                duration: 1,
+                targets: fabricObject,
+                easing: "linear",
+              },
+              editorElement.timeFrame.start
+            );
+            this.animationTimeLine.add(
+              {
+                opacity: [0, 1],
+                duration: 1,
+                targets: fabricObject,
+                easing: "linear",
+              },
+              editorElement.timeFrame.start + animation.duration
+            );
+
+            this.animationTimeLine.add(
+              {
+                opacity: [0, 1],
+                duration: 1,
+                targets: editorElement.properties.splittedTexts,
+                easing: "linear",
+              },
+              editorElement.timeFrame.start
+            );
+            this.animationTimeLine.add(
+              {
+                opacity: [1, 0],
+                duration: 1,
+                targets: editorElement.properties.splittedTexts,
+                easing: "linear",
+              },
+              editorElement.timeFrame.start + animation.duration
+            );
+          }
+          this.animationTimeLine.add(
+            {
+              left: [startPosition.left, targetPosition.left],
+              top: [startPosition.top, targetPosition.top],
+              duration: animation.duration,
+              targets: fabricObject,
+              easing: "linear",
+            },
+            editorElement.timeFrame.start
+          );
+          break;
+        }
+        case "slideOut": {
+          const direction = animation.properties.direction;
+          const startPosition = {
+            left: editorElement.placement.x,
+            top: editorElement.placement.y,
+          };
+          const targetPosition = {
+            left:
+              direction === "left"
+                ? -editorElement.placement.width
+                : direction === "right"
+                ? this.canvas?.width
+                : editorElement.placement.x,
+            top:
+              direction === "top"
+                ? -100 - editorElement.placement.height
+                : direction === "bottom"
+                ? this.canvas?.height
+                : editorElement.placement.y,
+          };
+          if (animation.properties.useClipPath) {
+            const clipRectangle = FabricUitls.getClipMaskRect(
+              editorElement,
+              50
+            );
+            fabricObject.set("clipPath", clipRectangle);
+          }
+          this.animationTimeLine.add(
+            {
+              left: [startPosition.left, targetPosition.left],
+              top: [startPosition.top, targetPosition.top],
+              duration: animation.duration,
+              targets: fabricObject,
+              easing: "linear",
+            },
+            editorElement.timeFrame.end - animation.duration
+          );
+          break;
+        }
+        case "breathe": {
+          const itsSlideInAnimation = this.animations.find(
+            (a) => a.targetId === animation.targetId && a.type === "slideIn"
+          );
+          const itsSlideOutAnimation = this.animations.find(
+            (a) => a.targetId === animation.targetId && a.type === "slideOut"
+          );
+          const timeEndOfSlideIn = itsSlideInAnimation
+            ? editorElement.timeFrame.start + itsSlideInAnimation.duration
+            : editorElement.timeFrame.start;
+          const timeStartOfSlideOut = itsSlideOutAnimation
+            ? editorElement.timeFrame.end - itsSlideOutAnimation.duration
+            : editorElement.timeFrame.end;
+          if (timeEndOfSlideIn > timeStartOfSlideOut) {
+            continue;
+          }
+          const duration = timeStartOfSlideOut - timeEndOfSlideIn;
+          const easeFactor = 4;
+          const suitableTimeForHeartbeat = ((1000 * 60) / 72) * easeFactor;
+          const upScale = 1.05;
+          const currentScaleX = fabricObject.scaleX ?? 1;
+          const currentScaleY = fabricObject.scaleY ?? 1;
+          const finalScaleX = currentScaleX * upScale;
+          const finalScaleY = currentScaleY * upScale;
+          const totalHeartbeats = Math.floor(
+            duration / suitableTimeForHeartbeat
+          );
+          if (totalHeartbeats < 1) {
+            continue;
+          }
+          const keyframes = [];
+          for (let i = 0; i < totalHeartbeats; i++) {
+            keyframes.push({ scaleX: finalScaleX, scaleY: finalScaleY });
+            keyframes.push({ scaleX: currentScaleX, scaleY: currentScaleY });
+          }
+
+          this.animationTimeLine.add(
+            {
+              duration: duration,
+              targets: fabricObject,
+              keyframes,
+              easing: "linear",
+              loop: true,
+            },
+            timeEndOfSlideIn
+          );
+
+          break;
+        }
+      }
+    }
+    console.log("Animations refreshed.");
+  }
+
+  // updateEffect(id: string, effect: Effect) {
+  //   const index = this.editorElements.findIndex((element) => element.id === id);
+  //   const element = this.editorElements[index];
+  //   if (isEditorVideoElement(element) || isEditorImageElement(element)) {
+  //     element.properties.effect = effect;
+  //   }
+  //   this.refreshElements();
+  // }
+
+  updateEffect(id: string, effect: Effect) {
+    const index = this.editorElements.findIndex((element) => element.id === id);
+    const element = this.editorElements[index];
+    if (isEditorVideoElement(element) || isEditorImageElement(element)) {
+      element.properties.effect = effect;
+      this.applyEffectToFabricObject(element);
+    }
+    this.refreshElements();
+  }
+
+  applyEffectToFabricObject(element: VideoEditorElement | ImageEditorElement) {
+    console.log("effect");
+    const fabricObject = element.fabricObject;
+    if (!fabricObject) return;
+
+    // Remove any existing filters
+    fabricObject.filters = [];
+
+    // Apply the appropriate filter based on the effect type
+    switch (element.properties.effect.type) {
+      case "blackAndWhite":
+        fabricObject.filters.push(new fabric.Image.filters.Grayscale());
+        break;
+      case "saturate":
+        fabricObject.filters.push(
+          new fabric.Image.filters.Saturation({ saturation: 1 })
+        );
+        break;
+      case "sepia":
+        fabricObject.filters.push(new fabric.Image.filters.Sepia());
+        break;
+      case "invert":
+        fabricObject.filters.push(new fabric.Image.filters.Invert());
+        break;
+      case "blur":
+        fabricObject.filters.push(new fabric.Image.filters.Blur({ blur: 0.5 }));
+        break;
+      case "brightness":
+        fabricObject.filters.push(
+          new fabric.Image.filters.Brightness({ brightness: 0.05 })
+        );
+        break;
+      case "contrast":
+        fabricObject.filters.push(
+          new fabric.Image.filters.Contrast({ contrast: 0.1 })
+        );
+        break;
+      case "pixelate":
+        fabricObject.filters.push(
+          new fabric.Image.filters.Pixelate({ blocksize: 4 })
+        );
+        break;
+      case "noise":
+        fabricObject.filters.push(
+          new fabric.Image.filters.Noise({ noise: 150 })
+        );
+        break;
+      case "removeColor":
+        fabricObject.filters.push(
+          new fabric.Image.filters.RemoveColor({
+            distance: 0.1,
+            color: "#ffffff", // Removes colors close to white; adjust as needed
+          })
+        );
+        break;
+
+      case "none":
+      default:
+        // No filter
+        break;
+    }
+
+    // Re-apply filters and render the canvas
+    fabricObject.applyFilters();
+    this.canvas?.renderAll();
   }
 
   updateEditorElementTimeFrame(
@@ -91,21 +505,47 @@ export class Store {
     this.updateVideoElements();
     this.updateAudioElements();
     this.updateEditorElement(newEditorElement);
-    // this.refreshAnimations();
+    this.refreshAnimations();
   }
 
   addElement(element: EditorElement) {
     this.editorElements.push(element);
     this.refreshElements();
+    this.setSelectedElement(
+      this.editorElements[this.editorElements.length - 1]
+    );
   }
 
   setSelectedElement(selectedElement: EditorElement | null) {
+    console.log(selectedElement?.type);
     this.selectedElement = selectedElement;
     if (this.canvas) {
       if (selectedElement?.fabricObject)
         this.canvas.setActiveObject(selectedElement.fabricObject);
       else this.canvas.discardActiveObject();
     }
+  }
+
+  updateSelectedElement() {
+    this.selectedElement =
+      this.editorElements.find(
+        (element) => element.id === this.selectedElement?.id
+      ) ?? null;
+  }
+
+  setEditorElements(editorElements: EditorElement[]) {
+    this.editorElements = editorElements;
+    this.updateSelectedElement();
+    this.refreshElements();
+    this.refreshAnimations();
+  }
+
+  updateEditorElement(editorElement: EditorElement) {
+    this.setEditorElements(
+      this.editorElements.map((element) =>
+        element.id === editorElement.id ? editorElement : element
+      )
+    );
   }
 
   addImageResource(image: string) {
@@ -127,6 +567,7 @@ export class Store {
     canvas.remove(...canvas.getObjects());
     for (let index = 0; index < store.editorElements.length; index++) {
       const element = store.editorElements[index];
+      console.log(element);
       switch (element.type) {
         case "rectangle":
           const rect = new fabric.Rect({
@@ -138,6 +579,7 @@ export class Store {
             angle: element.placement.rotation,
             scaleX: element.placement.scaleX,
             scaleY: element.placement.scaleY,
+            selectable: true,
           });
           element.fabricObject = rect;
           this.canvas?.add(rect);
@@ -163,6 +605,9 @@ export class Store {
             angle: element.placement.rotation,
             originX: "left",
             originY: "top",
+            selectable: true, // Ensures the object is selectable
+            evented: true,
+            objectCaching: false,
             // objectCaching: false,
             // selectable: true,
             // lockUniScaling: true,
@@ -187,10 +632,10 @@ export class Store {
           });
 
           canvas.add(videoObject);
-
           // Store the fabric object
           element.fabricObject = videoObject;
           element.properties.imageObject = videoObject;
+          this.applyEffectToFabricObject(element);
 
           // Event handler for when the video object is modified
           videoObject.on("modified", function (e) {
@@ -250,6 +695,9 @@ export class Store {
                 angle: element.placement.rotation,
                 originX: "left",
                 originY: "top",
+                selectable: true, // Ensures the object is selectable
+                evented: true,
+                objectCaching: false,
               });
 
               // Calculate desired scaling
@@ -269,6 +717,7 @@ export class Store {
 
               // Store the fabric object
               element.fabricObject = img;
+              this.applyEffectToFabricObject(element);
 
               // Event handler for when the image is modified
               img.on("modified", function (e) {
@@ -319,7 +768,8 @@ export class Store {
       }
 
       if (element.fabricObject) {
-        element.fabricObject.on("selected", function (e) {
+        element.fabricObject.on("object:selected", function (e) {
+          console.log("selected");
           store.setSelectedElement(element);
         });
       }
@@ -329,31 +779,9 @@ export class Store {
     if (selectedEditorElement && selectedEditorElement.fabricObject) {
       canvas.setActiveObject(selectedEditorElement.fabricObject);
     }
-    // this.refreshAnimations();
+    this.refreshAnimations();
     this.updateTimeTo(this.currentTimeInMs);
     store.canvas.renderAll();
-  }
-
-  updateSelectedElement() {
-    this.selectedElement =
-      this.editorElements.find(
-        (element) => element.id === this.selectedElement?.id
-      ) ?? null;
-  }
-
-  setEditorElements(editorElements: EditorElement[]) {
-    this.editorElements = editorElements;
-    this.updateSelectedElement();
-    this.refreshElements();
-    // this.refreshAnimations();
-  }
-
-  updateEditorElement(editorElement: EditorElement) {
-    this.setEditorElements(
-      this.editorElements.map((element) =>
-        element.id === editorElement.id ? editorElement : element
-      )
-    );
   }
 
   setMaxTime(maxTime: number) {
@@ -365,13 +793,15 @@ export class Store {
     // this.updateVideoElements();
     // this.updateAudioElements();
     if (playing) {
+      // this.animationTimeLine.play();
       this.startedTime = Date.now();
       this.startedTimePlay = this.currentTimeInMs;
       requestAnimationFrame(() => {
         this.playFrames();
       });
     } else {
-      // Ensure that videos and audios are paused when not playing
+      // this.animationTimeLine.play();
+      //   // Ensure that videos and audios are paused when not playing
       this.updateVideoElements();
       this.updateAudioElements();
     }
@@ -438,7 +868,7 @@ export class Store {
       },
       timeFrame: {
         start: 0,
-        end: 5000,
+        end: 10000,
       },
       properties: {
         fill: "red",
@@ -470,7 +900,7 @@ export class Store {
       },
       timeFrame: {
         start: 0,
-        end: 5000,
+        end: 10000,
       },
       properties: {
         elementId: `image-${index}`,
@@ -497,15 +927,15 @@ export class Store {
       placement: {
         x: 0,
         y: 0,
-        width: 100 * aspectRatio,
-        height: 100,
+        width: 300 * aspectRatio,
+        height: 300,
         rotation: 0,
         scaleX: 1,
         scaleY: 1,
       },
       timeFrame: {
-        start: 2000,
-        end: 6000,
+        start: 0,
+        end: 10000,
         // end: videoDurationMs,
       },
       properties: {
@@ -539,7 +969,7 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 5000,
+        start: 0,
         end: 10000,
         // end: audioDurationMs,
       },
@@ -585,6 +1015,13 @@ export class Store {
               this.currentTimeInMs >= element.timeFrame.end
             ) {
               video.pause();
+            }
+
+            if (element.fabricObject && video) {
+              const videoObject = element.fabricObject as fabric.Image;
+              videoObject.setElement(video);
+              videoObject.setCoords(); // Update the object's coordinates if moved
+              this.canvas?.renderAll();
             }
           } else {
             video.pause();
@@ -636,4 +1073,56 @@ export class Store {
 
 function getUid() {
   return Math.random().toString(36).substring(2, 9);
+}
+
+export function isEditorAudioElement(
+  element: EditorElement
+): element is AudioEditorElement {
+  return element.type === "audio";
+}
+export function isEditorVideoElement(
+  element: EditorElement
+): element is VideoEditorElement {
+  return element.type === "video";
+}
+
+export function isEditorImageElement(
+  element: EditorElement
+): element is ImageEditorElement {
+  return element.type === "image";
+}
+
+function getTextObjectsPartitionedByCharacters(
+  textObject: fabric.Text,
+  element: TextEditorElement
+): fabric.Text[] {
+  let copyCharsObjects: fabric.Text[] = [];
+  // replace all line endings with blank
+  const characters = (textObject.text ?? "")
+    .split("")
+    .filter((m) => m !== "\n");
+  const charObjects = textObject.__charBounds;
+  if (!charObjects) return [];
+  const charObjectFixed = charObjects
+    .map((m, index) => m.slice(0, m.length - 1).map((m) => ({ m, index })))
+    .flat();
+  const lineHeight = textObject.getHeightOfLine(0);
+  for (let i = 0; i < characters.length; i++) {
+    if (!charObjectFixed[i]) continue;
+    const { m: charObject, index: lineIndex } = charObjectFixed[i];
+    const char = characters[i];
+    const scaleX = textObject.scaleX ?? 1;
+    const scaleY = textObject.scaleY ?? 1;
+    const charTextObject = new fabric.Text(char, {
+      left: charObject.left * scaleX + element.placement.x,
+      scaleX: scaleX,
+      scaleY: scaleY,
+      top: lineIndex * lineHeight * scaleY + element.placement.y,
+      fontSize: textObject.fontSize,
+      fontWeight: textObject.fontWeight,
+      fill: "#fff",
+    });
+    copyCharsObjects.push(charTextObject);
+  }
+  return copyCharsObjects;
 }

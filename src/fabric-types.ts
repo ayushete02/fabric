@@ -62,6 +62,19 @@ export type EffectBase<T extends string> = {
   type: T;
 };
 
+export type EffectType =
+  | "none"
+  | "blackAndWhite"
+  | "saturate"
+  | "sepia"
+  | "invert"
+  | "blur"
+  | "brightness"
+  | "contrast"
+  | "pixelate"
+  | "noise"
+  | "removeColor";
+
 export type BlackAndWhiteEffect =
   | EffectBase<"none">
   | EffectBase<"blackAndWhite">
