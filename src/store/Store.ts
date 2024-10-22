@@ -409,79 +409,125 @@ export class Store {
   //   this.refreshElements();
   // }
 
-  updateEffect(id: string, effect: Effect) {
-    const index = this.editorElements.findIndex((element) => element.id === id);
-    const element = this.editorElements[index];
+  updateEffect(
+    id: string,
+    effectType: keyof Effects,
+    effectProperties: Partial<EffectBase<string, any>>
+  ) {
+    const elementIndex = this.editorElements.findIndex(
+      (element) => element.id === id
+    );
+    const element = this.editorElements[elementIndex];
+
     if (isEditorVideoElement(element) || isEditorImageElement(element)) {
-      element.properties.effect = effect;
+      // Update the specified effect properties
+      element.properties.effects[effectType] = {
+        ...element.properties.effects[effectType],
+        ...effectProperties,
+        enabled:
+          effectProperties.enabled ??
+          element.properties.effects[effectType]?.enabled,
+      };
       this.applyEffectToFabricObject(element);
     }
     this.refreshElements();
   }
 
+  updateFilterValue(id: string, property: string, value: number | string) {
+    const element = this.editorElements.find((el) => el.id === id);
+    if (
+      element &&
+      (isEditorVideoElement(element) || isEditorImageElement(element))
+    ) {
+      element.properties.effect[property] = value;
+      this.applyEffectToFabricObject(element);
+    }
+  }
+
   applyEffectToFabricObject(element: VideoEditorElement | ImageEditorElement) {
-    console.log("effect");
     const fabricObject = element.fabricObject;
     if (!fabricObject) return;
 
-    // Remove any existing filters
+    // Clear any existing filters
     fabricObject.filters = [];
 
-    // Apply the appropriate filter based on the effect type
-    switch (element.properties.effect.type) {
-      case "blackAndWhite":
-        fabricObject.filters.push(new fabric.Image.filters.Grayscale());
-        break;
-      case "saturate":
-        fabricObject.filters.push(
-          new fabric.Image.filters.Saturation({ saturation: 1 })
-        );
-        break;
-      case "sepia":
-        fabricObject.filters.push(new fabric.Image.filters.Sepia());
-        break;
-      case "invert":
-        fabricObject.filters.push(new fabric.Image.filters.Invert());
-        break;
-      case "blur":
-        fabricObject.filters.push(new fabric.Image.filters.Blur({ blur: 0.5 }));
-        break;
-      case "brightness":
-        fabricObject.filters.push(
-          new fabric.Image.filters.Brightness({ brightness: 0.05 })
-        );
-        break;
-      case "contrast":
-        fabricObject.filters.push(
-          new fabric.Image.filters.Contrast({ contrast: 0.1 })
-        );
-        break;
-      case "pixelate":
-        fabricObject.filters.push(
-          new fabric.Image.filters.Pixelate({ blocksize: 4 })
-        );
-        break;
-      case "noise":
-        fabricObject.filters.push(
-          new fabric.Image.filters.Noise({ noise: 150 })
-        );
-        break;
-      case "removeColor":
-        fabricObject.filters.push(
-          new fabric.Image.filters.RemoveColor({
-            distance: 0.1,
-            color: "#ffffff", // Removes colors close to white; adjust as needed
-          })
-        );
-        break;
+    // Apply all enabled effects
+    const effects = element.properties.effects;
 
-      case "none":
-      default:
-        // No filter
-        break;
+    if (effects.brightness && effects.brightness.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Brightness({
+          brightness: effects.brightness.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.contrast && effects.contrast.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Contrast({
+          contrast: effects.contrast.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.saturation && effects.saturation.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Saturation({
+          saturation: effects.saturation.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.sepia && effects.sepia.enabled) {
+      fabricObject.filters.push(new fabric.Image.filters.Sepia());
+    }
+    if (effects.invert && effects.invert.enabled) {
+      fabricObject.filters.push(new fabric.Image.filters.Invert());
+    }
+    if (effects.blur && effects.blur.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Blur({
+          value: effects.blur.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.pixelate && effects.pixelate.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Pixelate({
+          blocksize: effects.pixelate.properties?.value || 4,
+        })
+      );
+    }
+    if (effects.noise && effects.noise.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.Noise({
+          noise: effects.noise.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.hue && effects.hue.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.HueRotation({
+          rotation: effects.hue.properties?.value || 0,
+        })
+      );
+    }
+    if (effects.removeColor && effects.removeColor.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.RemoveColor({
+          color: effects.removeColor.properties?.color || "#ffffff",
+          distance: effects.removeColor.properties?.distance || 0.1,
+        })
+      );
+    }
+    if (effects.blendColor && effects.blendColor.enabled) {
+      fabricObject.filters.push(
+        new fabric.Image.filters.BlendColor({
+          color: effects.blendColor.properties?.color || "#ffffff",
+          mode: effects.blendColor.properties?.mode || "multiply",
+          alpha: effects.blendColor.properties?.alpha || 1,
+        })
+      );
     }
 
-    // Re-apply filters and render the canvas
+    // Apply all filters
     fabricObject.applyFilters();
     this.canvas?.renderAll();
   }
@@ -939,7 +985,6 @@ export class Store {
 
     this.addElement(rectangleElement);
   }
-
   addImage(index: number) {
     const imageElement = document.getElementById(`image-${index}`);
     if (!isHtmlImageElement(imageElement)) {
@@ -967,8 +1012,42 @@ export class Store {
       properties: {
         elementId: `image-${index}`,
         src: imageElement.src,
-        effect: {
-          type: "none",
+        effects: {
+          brightness: {
+            type: "brightness",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          contrast: {
+            type: "contrast",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          saturation: {
+            type: "saturation",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          sepia: { type: "sepia", enabled: false },
+          invert: { type: "invert", enabled: false },
+          blur: { type: "blur", enabled: false, properties: { value: 0 } },
+          pixelate: {
+            type: "pixelate",
+            enabled: false,
+            properties: { value: 4 },
+          },
+          noise: { type: "noise", enabled: false, properties: { value: 0 } },
+          hue: { type: "hue", enabled: false, properties: { value: 0 } },
+          removeColor: {
+            type: "removeColor",
+            enabled: false,
+            properties: { color: "#ffffff", distance: 0.1 },
+          },
+          blendColor: {
+            type: "blendColor",
+            enabled: false,
+            properties: { color: "#ffffff", mode: "multiply", alpha: 1 },
+          },
         },
       },
     });
@@ -998,13 +1077,46 @@ export class Store {
       timeFrame: {
         start: 0,
         end: 10000,
-        // end: videoDurationMs,
       },
       properties: {
         elementId: `video-${index}`,
         src: videoElement.src,
-        effect: {
-          type: "none",
+        effects: {
+          brightness: {
+            type: "brightness",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          contrast: {
+            type: "contrast",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          saturation: {
+            type: "saturation",
+            enabled: false,
+            properties: { value: 0 },
+          },
+          sepia: { type: "sepia", enabled: false },
+          invert: { type: "invert", enabled: false },
+          blur: { type: "blur", enabled: false, properties: { value: 0 } },
+          pixelate: {
+            type: "pixelate",
+            enabled: false,
+            properties: { value: 4 },
+          },
+          noise: { type: "noise", enabled: false, properties: { value: 0 } },
+          hue: { type: "hue", enabled: false, properties: { value: 0 } },
+          removeColor: {
+            type: "removeColor",
+            enabled: false,
+            properties: { color: "#ffffff", distance: 0.1 },
+          },
+          blendColor: {
+            type: "blendColor",
+            enabled: false,
+            properties: { color: "#ffffff", mode: "multiply", alpha: 1 },
+          },
         },
       },
     });

@@ -9,17 +9,24 @@ export type EditorElementBase<T extends string, P> = {
   timeFrame: TimeFrame;
   properties: P;
 };
+
 export type VideoEditorElement = EditorElementBase<
   "video",
-  { src: string; elementId: string; imageObject?: fabric.Image; effect: Effect }
+  {
+    src: string;
+    elementId: string;
+    imageObject?: fabric.Image;
+    effects: Effects;
+  }
 >;
+
 export type ImageEditorElement = EditorElementBase<
   "image",
   {
     src: string;
     elementId: string;
     imageObject?: fabric.Object;
-    effect: Effect;
+    effects: Effects;
   }
 >;
 
@@ -27,6 +34,7 @@ export type AudioEditorElement = EditorElementBase<
   "audio",
   { src: string; elementId: string }
 >;
+
 export type TextEditorElement = EditorElementBase<
   "text",
   {
@@ -66,33 +74,54 @@ export type TimeFrame = {
   end: number;
 };
 
-export type EffectBase<T extends string> = {
+export type EffectBase<T extends string, P = {}> = {
   type: T;
+  enabled: boolean;
+  properties?: P;
 };
 
-export type EffectType =
-  | "none"
-  | "blackAndWhite"
-  | "saturate"
-  | "sepia"
-  | "invert"
-  | "blur"
-  | "brightness"
-  | "contrast"
-  | "pixelate"
-  | "noise"
-  | "removeColor";
+export type BrightnessEffect = EffectBase<"brightness", { value: number }>;
+export type ContrastEffect = EffectBase<"contrast", { value: number }>;
+export type SaturationEffect = EffectBase<"saturation", { value: number }>;
+export type SepiaEffect = EffectBase<"sepia">;
+export type InvertEffect = EffectBase<"invert">;
+export type BlurEffect = EffectBase<"blur", { value: number }>;
+export type PixelateEffect = EffectBase<"pixelate", { value: number }>;
+export type NoiseEffect = EffectBase<"noise", { value: number }>;
+export type GammaEffect = EffectBase<
+  "gamma",
+  { red: number; green: number; blue: number }
+>;
+export type RemoveColorEffect = EffectBase<
+  "removeColor",
+  { color: string; distance: number }
+>;
+export type HueEffect = EffectBase<"hue", { value: number }>;
+export type BlendColorEffect = EffectBase<
+  "blendColor",
+  { color: string; mode: string; alpha: number }
+>;
+export type BlendImageEffect = EffectBase<
+  "blendImage",
+  { image: fabric.Image; mode: string; alpha: number }
+>;
 
-export type BlackAndWhiteEffect =
-  | EffectBase<"none">
-  | EffectBase<"blackAndWhite">
-  | EffectBase<"sepia">
-  | EffectBase<"invert">
-  | EffectBase<"saturate">;
-export type Effect = BlackAndWhiteEffect;
-export type EffecType = Effect["type"];
+export type Effects = {
+  brightness?: BrightnessEffect;
+  contrast?: ContrastEffect;
+  saturation?: SaturationEffect;
+  sepia?: SepiaEffect;
+  invert?: InvertEffect;
+  blur?: BlurEffect;
+  pixelate?: PixelateEffect;
+  noise?: NoiseEffect;
+  gamma?: GammaEffect;
+  removeColor?: RemoveColorEffect;
+  hue?: HueEffect;
+  blendColor?: BlendColorEffect;
+  blendImage?: BlendImageEffect;
+};
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type AnimationBase<T, P = {}> = {
   id: string;
   targetId: string;
