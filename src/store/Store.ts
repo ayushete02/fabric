@@ -9,6 +9,7 @@ import {
   ImageEditorElement,
   MenuOption,
   Placement,
+  TextEditorElement,
   TimeFrame,
   VideoEditorElement,
 } from "@/fabric-types";
@@ -761,6 +762,67 @@ export class Store {
           // However, you might want to show an icon or waveform in the future.
           break;
         }
+        case "text": {
+          const textObject = new fabric.Textbox(element.properties.text, {
+            name: element.id,
+            left: element.placement.x,
+            top: element.placement.y,
+            scaleX: element.placement.scaleX,
+            scaleY: element.placement.scaleY,
+            width: element.placement.width,
+            height: element.placement.height,
+            angle: element.placement.rotation,
+            fontSize: element.properties.fontSize,
+            fontWeight: element.properties.fontWeight,
+            fontFamily: element.properties.fontFamily,
+            fill: element.properties.fill,
+            backgroundColor:
+              element.properties.backgroundColor || "transparent",
+            underline: element.properties.underline || false,
+            fontStyle: element.properties.italic ? "italic" : "normal",
+            textAlign: element.properties.textAlign || "left",
+            objectCaching: false,
+            selectable: true,
+            lockUniScaling: true,
+          });
+
+          // Apply uppercase or lowercase transformation if specified
+          if (element.properties.upperCase) {
+            textObject.set({ text: element.properties.text.toUpperCase() });
+          } else if (element.properties.lowerCase) {
+            textObject.set({ text: element.properties.text.toLowerCase() });
+          }
+
+          element.fabricObject = textObject;
+          canvas.add(textObject);
+          canvas.on("object:modified", function (e) {
+            if (!e.target) return;
+            const target = e.target;
+            if (target != textObject) return;
+            const placement = element.placement;
+            const newPlacement: Placement = {
+              ...placement,
+              x: target.left ?? placement.x,
+              y: target.top ?? placement.y,
+              rotation: target.angle ?? placement.rotation,
+              width: target.width ?? placement.width,
+              height: target.height ?? placement.height,
+              scaleX: target.scaleX ?? placement.scaleX,
+              scaleY: target.scaleY ?? placement.scaleY,
+            };
+            const newElement = {
+              ...element,
+              placement: newPlacement,
+              properties: {
+                ...element.properties,
+                // @ts-ignore
+                text: target?.text,
+              },
+            };
+            store.updateEditorElement(newElement);
+          });
+          break;
+        }
 
         default: {
           throw new Error(`Element type "${element.type}" not implemented`);
@@ -983,6 +1045,61 @@ export class Store {
     });
   }
 
+  addText(options: {
+    text: string;
+    fontSize: number;
+    fontWeight: number;
+    fontFamily?: string;
+    fill?: string;
+    underline?: boolean;
+    italic?: boolean;
+    backgroundColor?: string;
+    upperCase?: boolean;
+    lowerCase?: boolean;
+    textAlign?: "left" | "center" | "right";
+  }) {
+    const id = getUid();
+    const index = this.editorElements.length;
+
+    // Apply uppercase or lowercase transformation if specified
+    const transformedText = options.upperCase
+      ? options.text.toUpperCase()
+      : options.lowerCase
+      ? options.text.toLowerCase()
+      : options.text;
+
+    this.addElement({
+      id,
+      name: `Text ${index + 1}`,
+      type: "text",
+      placement: {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      },
+      timeFrame: {
+        start: 0,
+        end: 4000,
+      },
+      properties: {
+        text: transformedText,
+        fontSize: options.fontSize,
+        fontWeight: options.fontWeight,
+        fontFamily: options.fontFamily ?? "Arial",
+        fill: options.fill ?? "#ffffff",
+        backgroundColor: options.backgroundColor ?? "transparent",
+        underline: options.underline ?? false,
+        italic: options.italic ?? false,
+        textAlign: options.textAlign ?? "left",
+        splittedTexts: [],
+      },
+    });
+  }
+
   updateVideoElements() {
     this.editorElements
       .filter(
@@ -1090,6 +1207,12 @@ export function isEditorImageElement(
   element: EditorElement
 ): element is ImageEditorElement {
   return element.type === "image";
+}
+
+export function isEditorTextElement(
+  element: EditorElement
+): element is TextEditorElement {
+  return element.type === "text";
 }
 
 function getTextObjectsPartitionedByCharacters(

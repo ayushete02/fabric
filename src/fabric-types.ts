@@ -33,6 +33,14 @@ export type TextEditorElement = EditorElementBase<
     text: string;
     fontSize: number;
     fontWeight: number;
+    fontFamily?: string;
+    fill?: string;
+    backgroundColor?: string; // New: Background color for the text
+    underline?: boolean; // New: Whether the text is underlined
+    italic?: boolean; // New: Whether the text is italicized
+    upperCase?: boolean; // New: Whether the text should be transformed to uppercase
+    lowerCase?: boolean; // New: Whether the text should be transformed to lowercase
+    textAlign?: "left" | "center" | "right"; // New: Text alignment
     splittedTexts: fabric.Text[];
   }
 >;
