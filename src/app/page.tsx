@@ -19,7 +19,7 @@ import { TextEditor } from "./components/text/TextEditor";
 const CanvasPage = () => {
   return (
     <CanvasProvider>
-      <div className="flex h-screen">
+      <div className="flex  max-h-screen">
         <Sidebar />
         <CanvasArea />
       </div>
@@ -50,7 +50,7 @@ const CanvasArea = observer(() => {
   }, []);
 
   return (
-    <div className="flex-1 flex justify-center items-center bg-gray-100 p-4">
+    <div className="flex-1 w-full  flex justify-center items-center bg-gray-100 p-4">
       <canvas id="canvas" className="border-2 border-gray-400 shadow-lg" />
     </div>
   );
@@ -134,7 +134,7 @@ const Sidebar = observer(() => {
   const formattedTime = formatTimeToMinSecMili(store.currentTimeInMs);
 
   return (
-    <div className="w-80 bg-black shadow-lg p-4 border-r border-gray-200">
+    <div className="max-w-96 w-full overflow-y-auto bg-black shadow-lg p-4 border-r border-gray-200">
       <h2 className="text-xl font-bold mb-4">Canvas Controls</h2>
       {!selectedElement && (
         <div className="space-y-4">
