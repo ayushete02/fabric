@@ -34,7 +34,7 @@ export class Store {
   images: string[] = [];
   selectedElement: EditorElement | null = null;
 
-  maxTime: number = 30 * 1000;
+  maxTime: number = 0;
   animations: Animation[] = [];
   animationTimeLine: anime.AnimeTimelineInstance = anime.timeline();
   playing: boolean = false;
@@ -55,6 +55,22 @@ export class Store {
 
   setCurrentTimeInMs(time: number) {
     this.currentKeyFrame = Math.floor((time / 1000) * this.fps);
+  }
+
+  playTimeline() {
+    this.animationTimeLine.play();
+  }
+
+  pauseTimeline() {
+    this.animationTimeLine.pause();
+  }
+
+  restartTimeline() {
+    this.animationTimeLine.restart();
+  }
+
+  seekTimeline(timeInMs: number) {
+    this.animationTimeLine.seek(timeInMs);
   }
 
   // setCanvas(canvas: fabric.Canvas | null) {
@@ -121,10 +137,18 @@ export class Store {
     // Remove existing animations
     anime.remove(this.animationTimeLine);
     this.animationTimeLine = anime.timeline({
-      duration: this.maxTime,
       autoplay: false,
-      update: () => {
+      update: (anim) => {
+        // Update the current time in the store based on the timeline's current time
+        this.setCurrentTimeInMs(anim.currentTime);
         this.canvas?.renderAll();
+      },
+      complete: () => {
+        // Animation timeline has completed, set playing to false
+        this.setPlaying(false);
+        this.setCurrentTimeInMs(0);
+        this.animationTimeLine.pause();
+        this.animationTimeLine.seek(0);
       },
     });
 
@@ -147,30 +171,51 @@ export class Store {
         return;
       }
 
+      // // Reset fabric object properties
+      // fabricObject.set({
+      //   opacity: 1,
+      //   left: editorElement.placement.x,
+      //   top: editorElement.placement.y,
+      //   scaleX: editorElement.placement.scaleX || 1,
+      //   scaleY: editorElement.placement.scaleY || 1,
+      //   angle: editorElement.placement.rotation || 0,
+      // });
+
       fabricObject.clipPath = undefined;
+
+      // Calculate the actual start time and duration of the animation
+      let animStartTime = editorElement.timeFrame.start;
+      let animDuration = animation.duration;
+
+      // Ensure the duration does not exceed the element's time frame
+      // animDuration = Math.min(
+      //   animation.duration,
+      //   editorElement.timeFrame.end - editorElement.timeFrame.start
+      // );
 
       switch (animation.type) {
         case "fadeIn": {
           this.animationTimeLine.add(
             {
               opacity: [0, 1],
-              duration: animation.duration,
+              duration: animDuration,
               targets: fabricObject,
               easing: "linear",
             },
-            editorElement.timeFrame.start
+            animStartTime
           );
           break;
         }
         case "fadeOut": {
+          animStartTime = editorElement.timeFrame.end - animDuration;
           this.animationTimeLine.add(
             {
               opacity: [1, 0],
-              duration: animation.duration,
+              duration: animDuration,
               targets: fabricObject,
               easing: "linear",
             },
-            editorElement.timeFrame.end - animation.duration
+            animStartTime
           );
           break;
         }
@@ -200,53 +245,68 @@ export class Store {
               break;
           }
 
+          fabricObject.set({
+            left: startPosition.left,
+            top: startPosition.top,
+          });
+
           this.animationTimeLine.add(
             {
               left: [startPosition.left, targetPosition.left],
               top: [startPosition.top, targetPosition.top],
-              duration: animation.duration,
+              duration: animDuration,
               targets: fabricObject,
-              easing: "linear",
+              easing: "easeOutQuad",
             },
-            editorElement.timeFrame.start
+            animStartTime
           );
           break;
         }
         case "slideOut": {
-          const direction = animation.properties.direction;
-          const targetPosition = { ...editorElement.placement };
+          animStartTime = editorElement.timeFrame.end - animDuration;
 
+          const direction = animation.properties.direction;
+          const startPosition = {
+            left: editorElement.placement.x,
+            top: editorElement.placement.y,
+          };
+
+          const targetPosition = { ...startPosition };
           const canvasWidth = this.canvas?.getWidth() || 800;
           const canvasHeight = this.canvas?.getHeight() || 600;
 
           switch (direction) {
             case "left":
-              targetPosition.x = -editorElement.placement.width;
+              targetPosition.left = -editorElement.placement.width;
               break;
             case "right":
-              targetPosition.x = canvasWidth;
+              targetPosition.left = canvasWidth;
               break;
             case "top":
-              targetPosition.y = -editorElement.placement.height;
+              targetPosition.top = -editorElement.placement.height;
               break;
             case "bottom":
-              targetPosition.y = canvasHeight;
+              targetPosition.top = canvasHeight;
               break;
           }
 
           this.animationTimeLine.add(
             {
-              left: [editorElement.placement.x, targetPosition.x],
-              top: [editorElement.placement.y, targetPosition.y],
-              duration: animation.duration,
+              left: [startPosition.left, targetPosition.left],
+              top: [startPosition.top, targetPosition.top],
+              duration: animDuration,
               targets: fabricObject,
-              easing: "linear",
+              easing: "easeInQuad",
             },
-            editorElement.timeFrame.end - animation.duration
+            animStartTime
           );
           break;
         }
         case "breathe": {
+          animDuration =
+            editorElement.timeFrame.end - editorElement.timeFrame.start;
+          animStartTime = editorElement.timeFrame.start;
+
           const upScale = 1.05;
           const currentScaleX = fabricObject.scaleX || 1;
           const currentScaleY = fabricObject.scaleY || 1;
@@ -257,20 +317,150 @@ export class Store {
             {
               scaleX: [currentScaleX, finalScaleX, currentScaleX],
               scaleY: [currentScaleY, finalScaleY, currentScaleY],
-              duration: animation.duration,
+              duration: animDuration,
               targets: fabricObject,
               easing: "easeInOutSine",
               loop: true,
             },
-            editorElement.timeFrame.start
+            animStartTime
           );
           break;
         }
-        // Add more animation types as needed
+        case "zoomIn": {
+          const initialScaleX = 0;
+          const initialScaleY = 0;
+          const targetScaleX = fabricObject.scaleX || 1;
+          const targetScaleY = fabricObject.scaleY || 1;
+
+          fabricObject.set({
+            scaleX: initialScaleX,
+            scaleY: initialScaleY,
+          });
+
+          this.animationTimeLine.add(
+            {
+              scaleX: [initialScaleX, targetScaleX],
+              scaleY: [initialScaleY, targetScaleY],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeOutBack",
+            },
+            animStartTime
+          );
+          break;
+        }
+        case "zoomOut": {
+          animStartTime = editorElement.timeFrame.end - animDuration;
+
+          const initialScaleX = fabricObject.scaleX || 1;
+          const initialScaleY = fabricObject.scaleY || 1;
+          const targetScaleX = 0;
+          const targetScaleY = 0;
+
+          this.animationTimeLine.add(
+            {
+              scaleX: [initialScaleX, targetScaleX],
+              scaleY: [initialScaleY, targetScaleY],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeInBack",
+            },
+            animStartTime
+          );
+          break;
+        }
+        case "rotateIn": {
+          const initialAngle = fabricObject.angle - 90;
+          const targetAngle = fabricObject.angle;
+
+          fabricObject.set({
+            angle: initialAngle,
+          });
+
+          this.animationTimeLine.add(
+            {
+              angle: [initialAngle, targetAngle],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeOutBack",
+            },
+            animStartTime
+          );
+          break;
+        }
+        case "rotateOut": {
+          animStartTime = editorElement.timeFrame.end - animDuration;
+
+          const initialAngle = fabricObject.angle;
+          const targetAngle = fabricObject.angle + 90;
+
+          this.animationTimeLine.add(
+            {
+              angle: [initialAngle, targetAngle],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeInBack",
+            },
+            animStartTime
+          );
+          break;
+        }
+        case "bounceIn": {
+          const initialScaleX = 0;
+          const initialScaleY = 0;
+          const targetScaleX = fabricObject.scaleX || 1;
+          const targetScaleY = fabricObject.scaleY || 1;
+
+          fabricObject.set({
+            scaleX: initialScaleX,
+            scaleY: initialScaleY,
+          });
+
+          this.animationTimeLine.add(
+            {
+              scaleX: [initialScaleX, targetScaleX],
+              scaleY: [initialScaleY, targetScaleY],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeOutBounce",
+            },
+            animStartTime
+          );
+          break;
+        }
+        case "bounceOut": {
+          animStartTime = editorElement.timeFrame.end - animDuration;
+
+          const initialScaleX = fabricObject.scaleX || 1;
+          const initialScaleY = fabricObject.scaleY || 1;
+          const targetScaleX = 0;
+          const targetScaleY = 0;
+
+          this.animationTimeLine.add(
+            {
+              scaleX: [initialScaleX, targetScaleX],
+              scaleY: [initialScaleY, targetScaleY],
+              duration: animDuration,
+              targets: fabricObject,
+              easing: "easeInBounce",
+            },
+            animStartTime
+          );
+          break;
+        }
         default:
           console.warn(`Animation type "${animation.type}" not implemented.`);
       }
     });
+
+    // Add a dummy animation to ensure the timeline runs until maxTime
+    this.animationTimeLine.add(
+      {
+        targets: {},
+        duration: 1,
+      },
+      this.maxTime - 1
+    );
 
     console.log("Animations refreshed.");
   }
@@ -787,18 +977,22 @@ export class Store {
 
   setPlaying(playing: boolean) {
     this.playing = playing;
-    // this.updateVideoElements();
-    // this.updateAudioElements();
+
     if (playing) {
-      // this.animationTimeLine.play();
+      // Play the anime.js timeline
+      this.playTimeline();
       this.startedTime = Date.now();
       this.startedTimePlay = this.currentTimeInMs;
       requestAnimationFrame(() => {
         this.playFrames();
       });
+      // Start videos and audios
+      // this.updateVideoElements();
+      // this.updateAudioElements();
     } else {
-      // this.animationTimeLine.play();
-      //   // Ensure that videos and audios are paused when not playing
+      // Pause the anime.js timeline
+      this.pauseTimeline();
+      // Pause videos and audios
       this.updateVideoElements();
       this.updateAudioElements();
     }
@@ -824,27 +1018,32 @@ export class Store {
     }
   }
 
-  updateTimeTo(newTime: number) {
-    this.setCurrentTimeInMs(newTime);
-    if (this.canvas) {
-      this.canvas.backgroundColor = this.backgroundColor;
-    }
+  updateTimeTo(newTimeInMs: number) {
+    this.setCurrentTimeInMs(newTimeInMs);
+    // Seek the anime.js timeline
+    this.seekTimeline(newTimeInMs);
+
+    // Update the visibility of elements
     this.editorElements.forEach((e) => {
       if (!e.fabricObject) return;
       const isInside =
-        e.timeFrame.start <= newTime && newTime <= e.timeFrame.end;
+        e.timeFrame.start <= newTimeInMs && newTimeInMs <= e.timeFrame.end;
       e.fabricObject.visible = isInside;
     });
-    this.canvas?.renderAll();
+
+    // Update videos and audios
     this.updateVideoElements();
     this.updateAudioElements();
+
+    // Render the canvas
+    this.canvas?.renderAll();
   }
 
-  handleSeek(seek: number) {
+  handleSeek(seekTimeInMs: number) {
     if (this.playing) {
       this.setPlaying(false);
     }
-    this.updateTimeTo(seek);
+    this.updateTimeTo(seekTimeInMs);
     this.updateVideoElements();
     this.updateAudioElements();
   }
@@ -881,6 +1080,13 @@ export class Store {
       return;
     }
     const aspectRatio = imageElement.naturalWidth / imageElement.naturalHeight;
+    const imageDurationMs = 5000;
+    const startTime = 2000;
+    this.setMaxTime(
+      this.maxTime < startTime + imageDurationMs
+        ? startTime + imageDurationMs
+        : this.maxTime
+    );
     const id = getUid();
     this.addElement({
       id: `image-${index}`,
@@ -896,8 +1102,8 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 0,
-        end: 10000,
+        start: startTime,
+        end: startTime + imageDurationMs,
       },
       properties: {
         elementId: `image-${index}`,
@@ -948,7 +1154,14 @@ export class Store {
     if (!isHtmlVideoElement(videoElement)) {
       return;
     }
-    const videoDurationMs = videoElement.duration * 1000;
+    // const videoDurationMs = videoElement.duration * 1000;
+    const videoDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + videoDurationMs
+        ? startTime + videoDurationMs
+        : this.maxTime
+    );
     const aspectRatio = videoElement.videoWidth / videoElement.videoHeight;
     const id = getUid();
     this.addElement({
@@ -965,8 +1178,8 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 0,
-        end: 10000,
+        start: startTime,
+        end: startTime + videoDurationMs,
       },
       properties: {
         elementId: `video-${index}`,
@@ -1017,7 +1230,14 @@ export class Store {
     if (!isHtmlAudioElement(audioElement)) {
       return;
     }
-    const audioDurationMs = audioElement.duration * 1000;
+    // const audioDurationMs = audioElement.duration * 1000;
+    const audioDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + audioDurationMs
+        ? startTime + audioDurationMs
+        : this.maxTime
+    );
     const id = getUid();
     this.addElement({
       id: `audio-${index}`,
@@ -1033,9 +1253,8 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 0,
-        end: 10000,
-        // end: audioDurationMs,
+        start: startTime,
+        end: startTime + audioDurationMs,
       },
       properties: {
         elementId: `audio-${index}`,
@@ -1070,6 +1289,14 @@ export class Store {
       ? options.text.toLowerCase()
       : options.text;
 
+    const textDurationMs = 4000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + textDurationMs
+        ? startTime + textDurationMs
+        : this.maxTime
+    );
+
     this.addElement({
       id,
       name: `Text ${index + 1}`,
@@ -1084,8 +1311,8 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 0,
-        end: 4000,
+        start: startTime,
+        end: startTime + textDurationMs,
       },
       properties: {
         text: transformedText,
