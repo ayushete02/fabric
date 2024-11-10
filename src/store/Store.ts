@@ -112,20 +112,62 @@ export class Store {
 
   // Method to update placement properties
   updateSelectedElementPlacement(partialPlacement: Partial<Placement>) {
-    if (!this.selectedElement) return;
+    if (!this.selectedElement || !this.selectedElement.fabricObject) return;
 
+    const fabricObject = this.selectedElement.fabricObject;
     const newPlacement = {
       ...this.selectedElement.placement,
       ...partialPlacement,
     };
 
-    const updatedElement = {
+    // Get the object's original width and height
+    const originalWidth = fabricObject.width || 0;
+    const originalHeight = fabricObject.height || 0;
+
+    // Update scaleX and width
+    if (partialPlacement.width !== undefined) {
+      const newScaleX = partialPlacement.width / originalWidth;
+      fabricObject.set("scaleX", newScaleX);
+      newPlacement.scaleX = newScaleX;
+      newPlacement.width = partialPlacement.width;
+    } else if (partialPlacement.scaleX !== undefined) {
+      fabricObject.set("scaleX", partialPlacement.scaleX);
+      newPlacement.width = originalWidth * partialPlacement.scaleX;
+      newPlacement.scaleX = partialPlacement.scaleX;
+    }
+
+    // Update scaleY and height
+    if (partialPlacement.height !== undefined) {
+      const newScaleY = partialPlacement.height / originalHeight;
+      fabricObject.set("scaleY", newScaleY);
+      newPlacement.scaleY = newScaleY;
+      newPlacement.height = partialPlacement.height;
+    } else if (partialPlacement.scaleY !== undefined) {
+      fabricObject.set("scaleY", partialPlacement.scaleY);
+      newPlacement.height = originalHeight * partialPlacement.scaleY;
+      newPlacement.scaleY = partialPlacement.scaleY;
+    }
+
+    // Set other properties like position and rotation
+    if (partialPlacement.x !== undefined) {
+      fabricObject.set("left", partialPlacement.x);
+    }
+    if (partialPlacement.y !== undefined) {
+      fabricObject.set("top", partialPlacement.y);
+    }
+    if (partialPlacement.rotation !== undefined) {
+      fabricObject.set("angle", partialPlacement.rotation);
+    }
+
+    // Ensure fabric object coordinates are recalculated
+    fabricObject.setCoords();
+    this.canvas?.renderAll();
+
+    // Update the store with the adjusted placement
+    this.updateEditorElement({
       ...this.selectedElement,
       placement: newPlacement,
-    };
-
-    this.updateEditorElement(updatedElement);
-    this.refreshElements();
+    });
   }
 
   // Method to update other properties (e.g., opacity, stroke, strokeWidth)
@@ -142,8 +184,17 @@ export class Store {
       properties: newProperties,
     };
 
+    // Update the Fabric.js object directly
+    if (this.selectedElement.fabricObject) {
+      const fabricObject = this.selectedElement.fabricObject;
+      Object.keys(partialProperties).forEach((key) => {
+        fabricObject.set(key, partialProperties[key]);
+      });
+      fabricObject.setCoords();
+      this.canvas?.renderAll();
+    }
+
     this.updateEditorElement(updatedElement);
-    this.refreshElements();
   }
 
   setBackgroundColor(backgroundColor: string) {
@@ -807,17 +858,62 @@ export class Store {
     this.audios = [...this.audios, audio];
   }
 
+  updateElementPlacementFromFabricObject(
+    element: EditorElement,
+    fabricObject: fabric.Object
+  ) {
+    const newPlacement: Placement = {
+      x: fabricObject.left ?? element.placement.x,
+      y: fabricObject.top ?? element.placement.y,
+      rotation: fabricObject.angle ?? element.placement.rotation,
+      scaleX: fabricObject.scaleX ?? element.placement.scaleX,
+      scaleY: fabricObject.scaleY ?? element.placement.scaleY,
+      width: element.placement.width,
+      height: element.placement.height,
+    };
+
+    // For images and videos, update width and height based on scaling
+    if (
+      fabricObject instanceof fabric.Image &&
+      (element.type === "image" || element.type === "video")
+    ) {
+      const originalSize = fabricObject.getOriginalSize();
+      newPlacement.width = originalSize.width * (fabricObject.scaleX || 1);
+      newPlacement.height = originalSize.height * (fabricObject.scaleY || 1);
+    }
+
+    // For text elements, update width and height as well
+    if (fabricObject instanceof fabric.Textbox && element.type === "text") {
+      newPlacement.width = fabricObject.width || element.placement.width;
+      newPlacement.height = fabricObject.height || element.placement.height;
+    }
+
+    const updatedElement = {
+      ...element,
+      placement: newPlacement,
+    };
+
+    this.updateEditorElement(updatedElement);
+  }
+
   refreshElements() {
     const store = this;
     if (!store.canvas) return;
     const canvas = store.canvas;
+
+    const selectedElementId = this.selectedElement?.id;
+
+    // Preserve the currently selected fabric object
+    let selectedFabricObject = this.selectedElement?.fabricObject;
+
     canvas.remove(...canvas.getObjects());
     for (let index = 0; index < store.editorElements.length; index++) {
       const element = store.editorElements[index];
+      let fabricObject: fabric.Object | null = null;
       console.log(element);
       switch (element.type) {
         case "rectangle":
-          const rect = new fabric.Rect({
+          fabricObject = new fabric.Rect({
             left: element.placement.x,
             top: element.placement.y,
             width: element.placement.width,
@@ -850,21 +946,24 @@ export class Store {
           videoElement.height =
             element.placement.height ?? videoElement.videoHeight;
 
+          const videoWidth =
+            videoElement.videoWidth || videoElement.clientWidth;
+          const videoHeight =
+            videoElement.videoHeight || videoElement.clientHeight;
+
           // Create a fabric.Image object using the video element as a source
-          const videoObject = new fabric.Image(videoElement, {
+          fabricObject = new fabric.Image(videoElement, {
             left: element.placement.x,
             top: element.placement.y,
             angle: element.placement.rotation,
             originX: "left",
             originY: "top",
-            selectable: true, // Ensures the object is selectable
-            evented: true,
-            objectCaching: false,
-            // objectCaching: false,
-            // selectable: true,
-            // lockUniScaling: true,
-            // scaleX: element.placement.scaleX,
-            // scaleY: element.placement.scaleY,
+            selectable: true,
+            scaleX: (element.placement.width || videoWidth) / videoWidth,
+            scaleY: (element.placement.height || videoHeight) / videoHeight,
+            opacity: element.properties.opacity || 1,
+            stroke: element.properties.stroke || undefined,
+            strokeWidth: element.properties.strokeWidth || 0,
           });
 
           // Calculate desired scaling
@@ -878,55 +977,55 @@ export class Store {
           const finalScaleX = scaleX * (element.placement.scaleX ?? 1);
           const finalScaleY = scaleY * (element.placement.scaleY ?? 1);
 
-          videoObject.set({
+          fabricObject.set({
             scaleX: finalScaleX,
             scaleY: finalScaleY,
           });
 
-          canvas.add(videoObject);
+          canvas.add(fabricObject);
           // Store the fabric object
-          element.fabricObject = videoObject;
-          element.properties.imageObject = videoObject;
+          element.fabricObject = fabricObject;
+          element.properties.imageObject = fabricObject;
           this.applyEffectToFabricObject(element);
 
           // Event handler for when the video object is modified
-          videoObject.on("modified", function (e) {
-            if (e.target != videoObject) return;
-            const target = e.target;
-            const placement = element.placement;
+          // videoObject.on("modified", function (e) {
+          //   if (e.target != videoObject) return;
+          //   const target = e.target;
+          //   const placement = element.placement;
 
-            const image = {
-              w: videoElement.videoWidth,
-              h: videoElement.videoHeight,
-            };
-            const toScale = {
-              x: element.placement.width / image.w,
-              y: element.placement.height / image.h,
-            };
+          //   const image = {
+          //     w: videoElement.videoWidth,
+          //     h: videoElement.videoHeight,
+          //   };
+          //   const toScale = {
+          //     x: element.placement.width / image.w,
+          //     y: element.placement.height / image.h,
+          //   };
 
-            let finalScale = 1;
-            if (target.scaleX && target.scaleX > 0) {
-              finalScale = target.scaleX / toScale.x;
-            }
+          //   let finalScale = 1;
+          //   if (target.scaleX && target.scaleX > 0) {
+          //     finalScale = target.scaleX / toScale.x;
+          //   }
 
-            const newPlacement = {
-              ...placement,
-              x: target.left ?? placement.x,
-              y: target.top ?? placement.y,
-              rotation: target.angle ?? placement.rotation,
-              width: target.width ? target.width : placement.width,
-              height: target.height ? target.height : placement.height,
-              scaleX: finalScale,
-              scaleY: finalScale,
-            };
+          //   const newPlacement = {
+          //     ...placement,
+          //     x: target.left ?? placement.x,
+          //     y: target.top ?? placement.y,
+          //     rotation: target.angle ?? placement.rotation,
+          //     width: target.width ? target.width : placement.width,
+          //     height: target.height ? target.height : placement.height,
+          //     scaleX: finalScale,
+          //     scaleY: finalScale,
+          //   };
 
-            const newElement = {
-              ...element,
-              placement: newPlacement,
-            };
+          //   const newElement = {
+          //     ...element,
+          //     placement: newPlacement,
+          //   };
 
-            store.updateEditorElement(newElement);
-          });
+          //   store.updateEditorElement(newElement);
+          // });
 
           break;
         }
@@ -937,7 +1036,9 @@ export class Store {
           );
           if (!isHtmlImageElement(imageElement)) continue;
           const imageUrl = element.properties.src;
-          fabric.Image.fromURL(
+          const imgWidth = imageElement.naturalWidth;
+          const imgHeight = imageElement.naturalHeight;
+          fabricObject = fabric.Image.fromURL(
             imageUrl,
             (img) => {
               // Set initial position, rotation, and origin
@@ -947,7 +1048,12 @@ export class Store {
                 angle: element.placement.rotation,
                 originX: "left",
                 originY: "top",
-                selectable: true, // Ensures the object is selectable
+                selectable: true,
+                scaleX: (element.placement.width || imgWidth) / imgWidth,
+                scaleY: (element.placement.height || imgHeight) / imgHeight,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
                 evented: true,
                 objectCaching: false,
               });
@@ -972,35 +1078,35 @@ export class Store {
               this.applyEffectToFabricObject(element);
 
               // Event handler for when the image is modified
-              img.on("modified", function (e) {
-                if (!e.target) return;
-                const target = e.target;
-                if (target != img) return;
-                const placement = element.placement;
+              // img.on("modified", function (e) {
+              //   if (!e.target) return;
+              //   const target = e.target;
+              //   if (target != img) return;
+              //   const placement = element.placement;
 
-                let finalScale = 1;
-                if (target.scaleX && target.scaleX > 0) {
-                  finalScale = target.scaleX / (desiredWidth / img.width);
-                }
+              //   let finalScale = 1;
+              //   if (target.scaleX && target.scaleX > 0) {
+              //     finalScale = target.scaleX / (desiredWidth / img.width);
+              //   }
 
-                const newPlacement: Placement = {
-                  ...placement,
-                  x: target.left ?? placement.x,
-                  y: target.top ?? placement.y,
-                  rotation: target.angle ?? placement.rotation,
-                  scaleX: finalScale,
-                  scaleY: finalScale,
-                  width: placement.width ?? target.width,
-                  height: placement.height ?? target.height,
-                };
+              //   const newPlacement: Placement = {
+              //     ...placement,
+              //     x: target.left ?? placement.x,
+              //     y: target.top ?? placement.y,
+              //     rotation: target.angle ?? placement.rotation,
+              //     scaleX: finalScale,
+              //     scaleY: finalScale,
+              //     width: placement.width ?? target.width,
+              //     height: placement.height ?? target.height,
+              //   };
 
-                const newElement = {
-                  ...element,
-                  placement: newPlacement,
-                };
+              //   const newElement = {
+              //     ...element,
+              //     placement: newPlacement,
+              //   };
 
-                store.updateEditorElement(newElement);
-              });
+              //   store.updateEditorElement(newElement);
+              // });
             },
             { crossOrigin: "anonymous" }
           );
@@ -1013,12 +1119,13 @@ export class Store {
           // However, you might want to show an icon or waveform in the future.
           break;
         }
+
         case "text": {
-          const textObject = new fabric.Textbox(element.properties.text, {
+          fabricObject = new fabric.Textbox(element.properties.text, {
             left: element.placement.x,
             top: element.placement.y,
-            scaleX: element.placement.scaleX,
-            scaleY: element.placement.scaleY,
+            scaleX: element.placement.scaleX || 1,
+            scaleY: element.placement.scaleY || 1,
             width: element.placement.width,
             height: element.placement.height,
             angle: element.placement.rotation,
@@ -1031,46 +1138,49 @@ export class Store {
             underline: element.properties.underline || false,
             fontStyle: element.properties.italic ? "italic" : "normal",
             textAlign: element.properties.textAlign || "left",
-            objectCaching: false,
+            opacity: element.properties.opacity || 1,
+            stroke: element.properties.stroke || undefined,
+            strokeWidth: element.properties.strokeWidth || 0,
             selectable: true,
             lockUniScaling: true,
+            objectCaching: false,
           });
 
           // Apply uppercase or lowercase transformation if specified
           if (element.properties.upperCase) {
-            textObject.set({ text: element.properties.text.toUpperCase() });
+            fabricObject.set({ text: element.properties.text.toUpperCase() });
           } else if (element.properties.lowerCase) {
-            textObject.set({ text: element.properties.text.toLowerCase() });
+            fabricObject.set({ text: element.properties.text.toLowerCase() });
           }
 
-          element.fabricObject = textObject;
-          canvas.add(textObject);
-          canvas.on("object:modified", function (e) {
-            if (!e.target) return;
-            const target = e.target;
-            if (target != textObject) return;
-            const placement = element.placement;
-            const newPlacement: Placement = {
-              ...placement,
-              x: target.left ?? placement.x,
-              y: target.top ?? placement.y,
-              rotation: target.angle ?? placement.rotation,
-              width: target.width ?? placement.width,
-              height: target.height ?? placement.height,
-              scaleX: target.scaleX ?? placement.scaleX,
-              scaleY: target.scaleY ?? placement.scaleY,
-            };
-            const newElement = {
-              ...element,
-              placement: newPlacement,
-              properties: {
-                ...element.properties,
-                // @ts-ignore
-                text: target?.text,
-              },
-            };
-            store.updateEditorElement(newElement);
-          });
+          element.fabricObject = fabricObject;
+          canvas.add(fabricObject);
+          // canvas.on("object:modified", function (e) {
+          //   if (!e.target) return;
+          //   const target = e.target;
+          //   if (target != textObject) return;
+          //   const placement = element.placement;
+          //   const newPlacement: Placement = {
+          //     ...placement,
+          //     x: target.left ?? placement.x,
+          //     y: target.top ?? placement.y,
+          //     rotation: target.angle ?? placement.rotation,
+          //     width: target.width ?? placement.width,
+          //     height: target.height ?? placement.height,
+          //     scaleX: target.scaleX ?? placement.scaleX,
+          //     scaleY: target.scaleY ?? placement.scaleY,
+          //   };
+          //   const newElement = {
+          //     ...element,
+          //     placement: newPlacement,
+          //     properties: {
+          //       ...element.properties,
+          //       // @ts-ignore
+          //       text: target?.text,
+          //     },
+          //   };
+          //   store.updateEditorElement(newElement);
+          // });
           break;
         }
 
@@ -1079,27 +1189,59 @@ export class Store {
         }
       }
 
-      // Apply opacity and border properties to all fabric objects
-      if (element.fabricObject) {
-        element.fabricObject.set({
-          opacity: element.properties.opacity || 1,
-          stroke: element.properties.stroke || undefined,
-          strokeWidth: element.properties.strokeWidth || 0,
+      if (fabricObject) {
+        // Assign the new fabric object to the element
+        element.fabricObject = fabricObject;
+
+        // Add the object to the canvas
+        canvas.add(fabricObject);
+
+        // Restore selection if this is the selected element
+        if (element.id === selectedElementId) {
+          canvas.setActiveObject(fabricObject);
+          this.setSelectedElement(element);
+        }
+
+        // Attach event listeners
+        fabricObject.on("modified", () => {
+          this.updateElementPlacementFromFabricObject(element, fabricObject!);
+        });
+        fabricObject.on("selected", () => {
+          this.setSelectedElement(element);
         });
       }
 
-      if (element.fabricObject) {
-        element.fabricObject.on("object:selected", function (e) {
-          console.log("selected");
-          store.setSelectedElement(element);
-        });
-      }
+      // // Apply opacity and border properties to all fabric objects
+      // if (element.fabricObject) {
+      //   element.fabricObject.set({
+      //     opacity: element.properties.opacity || 1,
+      //     stroke: element.properties.stroke || undefined,
+      //     strokeWidth: element.properties.strokeWidth || 0,
+      //   });
+      // }
+
+      // if (element.fabricObject) {
+      //   // Assign the new instance to selectedFabricObject if it matches the original
+      //   if (
+      //     selectedFabricObject &&
+      //     selectedFabricObject === element.fabricObject
+      //   ) {
+      //     selectedFabricObject = element.fabricObject;
+      //   }
+
+      //   // Set event listener on the new instance for selection
+      //   element.fabricObject.on("object:selected", function () {
+      //     store.setSelectedElement(element);
+      //   });
+      // }
     }
 
-    const selectedEditorElement = store.selectedElement;
-    if (selectedEditorElement && selectedEditorElement.fabricObject) {
-      canvas.setActiveObject(selectedEditorElement.fabricObject);
+    // Restore selection on the newly created object
+    if (selectedFabricObject) {
+      canvas.setActiveObject(selectedFabricObject);
+      this.setSelectedElement(store.selectedElement);
     }
+
     this.refreshAnimations();
     this.updateTimeTo(this.currentTimeInMs);
     store.canvas.renderAll();

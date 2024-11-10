@@ -1,6 +1,6 @@
 // In src/components/PropertiesPanel.tsx
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { observer } from "mobx-react-lite";
 import {
   isEditorImageElement,
@@ -17,6 +17,16 @@ const PropertiesPanel = observer(() => {
 
   const { placement, properties } = selectedElement;
 
+  // Local state to manage opacity
+  const [opacity, setOpacity] = useState(
+    selectedElement.fabricObject?.opacity || 1
+  );
+
+  // Sync local opacity state with selected element changes
+  useEffect(() => {
+    setOpacity(selectedElement.fabricObject?.opacity || 1);
+  }, [selectedElement]);
+
   const handlePlacementChange = (
     key: keyof typeof placement,
     value: number
@@ -26,6 +36,11 @@ const PropertiesPanel = observer(() => {
 
   const handlePropertiesChange = (key: string, value: any) => {
     store.updateSelectedElementProperties({ [key]: value });
+  };
+
+  const handleOpacityChange = (value: number) => {
+    setOpacity(value); // Update local opacity state
+    handlePropertiesChange("opacity", value); // Update the store
   };
 
   return (
@@ -112,10 +127,8 @@ const PropertiesPanel = observer(() => {
             min={0}
             max={1}
             step={0.01}
-            value={selectedElement.fabricObject?.opacity || 1}
-            onChange={(e) =>
-              handlePropertiesChange("opacity", parseFloat(e.target.value))
-            }
+            value={opacity}
+            onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
             className="w-full"
           />
         </div>

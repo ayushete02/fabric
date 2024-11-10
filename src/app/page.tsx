@@ -34,26 +34,37 @@ const CanvasArea = observer(() => {
   useEffect(() => {
     const canvas = new fabric.Canvas("canvas", {
       height: 600,
-      width: 1000,
+      width: 600,
       backgroundColor: "white",
     });
 
     fabric.Object.prototype.transparentCorners = false;
-    fabric.Object.prototype.cornerColor = "#2BEBC8";
+    fabric.Object.prototype.cornerColor = "#ffffff";
     fabric.Object.prototype.cornerStyle = "rect";
     fabric.Object.prototype.cornerStrokeColor = "#2BEBC8";
     fabric.Object.prototype.cornerSize = 6;
 
     store.setCanvas(canvas);
 
-    // Prevent object selection when cropping
-    canvas.on("object:selected", (e) => {
-      if (store.isCropping && e.target !== store.cropRect) {
-        canvas.discardActiveObject();
+    // Add event listener to handle clicks inside the canvas, but outside of any selected object
+    const handleClickOutside = (e) => {
+      const canvasElement = document.getElementById("canvas");
+
+      // Check if the click is outside the canvas element
+      if (!canvasElement.contains(e.target)) {
+        return; // Clicked outside the canvas, don't discard selection
       }
-    });
+
+      // If the click is inside the canvas but no object is selected, discard the selection
+      if (!canvas.getActiveObject()) {
+        canvas.discardActiveObject().renderAll();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
       canvas.dispose();
     };
   }, []);
@@ -193,8 +204,7 @@ const Sidebar = observer(() => {
       </button>
       {selectedElement && (
         <>
-          <PropertiesPanel /> {/* Include the PropertiesPanel */}
-          {/* ... existing code for effects and animations ... */}
+          <PropertiesPanel />
         </>
       )}
       {selectedElement &&
