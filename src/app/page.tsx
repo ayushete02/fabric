@@ -10,7 +10,11 @@ import { MdPlayArrow, MdPause } from "react-icons/md";
 import { observer } from "mobx-react-lite";
 import { fabric } from "fabric";
 import { formatTimeToMinSecMili, isHtmlImageElement } from "@/utils";
-import { isEditorImageElement, isEditorVideoElement } from "@/store/Store";
+import {
+  isEditorImageElement,
+  isEditorTextElement,
+  isEditorVideoElement,
+} from "@/store/Store";
 import { EffectResource } from "./components/effects/EffectResource";
 import { AnimationsPanel } from "./components/animation/AnimationsPanel";
 import { TextResourcesPanel } from "./components/text/TextResourcesPanel";
@@ -209,13 +213,16 @@ const Sidebar = observer(() => {
       )}
       {selectedElement &&
         (isEditorImageElement(selectedElement) ||
-          isEditorVideoElement(selectedElement)) && (
+          isEditorVideoElement(selectedElement) ||
+          isEditorTextElement(selectedElement)) && (
           <>
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold">Effects</h3>
+            {!isEditorTextElement(selectedElement) && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold">Effects</h3>
 
-              <EffectResource editorElement={selectedElement} />
-            </div>
+                <EffectResource editorElement={selectedElement} />
+              </div>
+            )}
             <div className="mt-6">
               <AnimationsPanel />
             </div>

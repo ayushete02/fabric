@@ -1155,6 +1155,7 @@ export class Store {
 
           element.fabricObject = fabricObject;
           canvas.add(fabricObject);
+
           // canvas.on("object:modified", function (e) {
           //   if (!e.target) return;
           //   const target = e.target;
