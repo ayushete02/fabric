@@ -15,6 +15,7 @@ import { EffectResource } from "./components/effects/EffectResource";
 import { AnimationsPanel } from "./components/animation/AnimationsPanel";
 import { TextResourcesPanel } from "./components/text/TextResourcesPanel";
 import { TextEditor } from "./components/text/TextEditor";
+import PropertiesPanel from "./components/properties/PropertiesPanel";
 
 const CanvasPage = () => {
   return (
@@ -44,6 +45,14 @@ const CanvasArea = observer(() => {
     fabric.Object.prototype.cornerSize = 6;
 
     store.setCanvas(canvas);
+
+    // Prevent object selection when cropping
+    canvas.on("object:selected", (e) => {
+      if (store.isCropping && e.target !== store.cropRect) {
+        canvas.discardActiveObject();
+      }
+    });
+
     return () => {
       canvas.dispose();
     };
@@ -182,6 +191,12 @@ const Sidebar = observer(() => {
       >
         <Icon size="24" />
       </button>
+      {selectedElement && (
+        <>
+          <PropertiesPanel /> {/* Include the PropertiesPanel */}
+          {/* ... existing code for effects and animations ... */}
+        </>
+      )}
       {selectedElement &&
         (isEditorImageElement(selectedElement) ||
           isEditorVideoElement(selectedElement)) && (

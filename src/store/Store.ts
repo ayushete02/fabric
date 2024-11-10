@@ -45,6 +45,9 @@ export class Store {
   possibleVideoFormats: string[] = ["mp4", "webm"];
   selectedVideoFormat: "mp4" | "webm" = "mp4";
 
+  isCropping: boolean = false;
+  cropRect: fabric.Rect | null = null;
+
   constructor() {
     makeAutoObservable(this);
   }
@@ -107,12 +110,129 @@ export class Store {
     this.setSelectedElement(selectedElement);
   }
 
+  // Method to update placement properties
+  updateSelectedElementPlacement(partialPlacement: Partial<Placement>) {
+    if (!this.selectedElement) return;
+
+    const newPlacement = {
+      ...this.selectedElement.placement,
+      ...partialPlacement,
+    };
+
+    const updatedElement = {
+      ...this.selectedElement,
+      placement: newPlacement,
+    };
+
+    this.updateEditorElement(updatedElement);
+    this.refreshElements();
+  }
+
+  // Method to update other properties (e.g., opacity, stroke, strokeWidth)
+  updateSelectedElementProperties(partialProperties: any) {
+    if (!this.selectedElement) return;
+
+    const newProperties = {
+      ...this.selectedElement.properties,
+      ...partialProperties,
+    };
+
+    const updatedElement = {
+      ...this.selectedElement,
+      properties: newProperties,
+    };
+
+    this.updateEditorElement(updatedElement);
+    this.refreshElements();
+  }
+
   setBackgroundColor(backgroundColor: string) {
     this.backgroundColor = backgroundColor;
     if (this.canvas) {
       this.canvas.selection = true;
       this.canvas.backgroundColor = backgroundColor;
     }
+  }
+
+  startCropping() {
+    if (!this.selectedElement || !this.canvas) return;
+
+    this.isCropping = true;
+    this.canvas.selection = false;
+    // this.canvas.discardActiveObject();
+
+    const element = this.selectedElement;
+    console.log(element);
+    const fabricObject = element.fabricObject;
+
+    if (!fabricObject) return;
+
+    // Create a semi-transparent rectangle over the object to define the crop area
+    this.cropRect = new fabric.Rect({
+      left: fabricObject.left,
+      top: fabricObject.top,
+      width: fabricObject.width! * fabricObject.scaleX!,
+      height: fabricObject.height! * fabricObject.scaleY!,
+      fill: "rgba(0,0,0,0.3)",
+      stroke: "red",
+      strokeWidth: 2,
+      hasBorders: true,
+      hasControls: true,
+      selectable: true,
+      objectCaching: false,
+    });
+
+    this.canvas.add(this.cropRect);
+    this.canvas.setActiveObject(this.cropRect);
+    this.canvas.renderAll();
+  }
+
+  applyCrop() {
+    if (!this.selectedElement || !this.canvas || !this.cropRect) return;
+
+    const element = this.selectedElement;
+    const fabricObject = element.fabricObject as fabric.Image;
+
+    if (!fabricObject) return;
+
+    const cropRect = this.cropRect;
+
+    // Calculate cropping parameters
+    const left = cropRect.left! - fabricObject.left!;
+    const top = cropRect.top! - fabricObject.top!;
+    const width = cropRect.width! * cropRect.scaleX!;
+    const height = cropRect.height! * cropRect.scaleY!;
+
+    fabricObject.set({
+      cropX: left / fabricObject.scaleX!,
+      cropY: top / fabricObject.scaleY!,
+      width: width / fabricObject.scaleX!,
+      height: height / fabricObject.scaleY!,
+    });
+
+    // Remove the cropping rectangle
+    this.canvas.remove(cropRect);
+    this.cropRect = null;
+    this.isCropping = false;
+    this.canvas.selection = true;
+    this.canvas.setActiveObject(fabricObject);
+    this.canvas.renderAll();
+
+    // Update the element's placement
+    this.updateSelectedElementPlacement({
+      width: width,
+      height: height,
+    });
+  }
+
+  cancelCrop() {
+    if (!this.canvas || !this.cropRect) return;
+
+    this.canvas.remove(this.cropRect);
+    this.cropRect = null;
+    this.isCropping = false;
+    this.canvas.selection = true;
+    this.canvas.renderAll();
   }
 
   addAnimation(animation: Animation) {
@@ -648,7 +768,7 @@ export class Store {
     if (this.canvas) {
       if (selectedElement?.fabricObject)
         this.canvas.setActiveObject(selectedElement.fabricObject);
-      else this.canvas.discardActiveObject();
+      // else this.canvas.discardActiveObject();
       this.canvas.renderAll();
     }
   }
@@ -706,6 +826,11 @@ export class Store {
             angle: element.placement.rotation,
             scaleX: element.placement.scaleX,
             scaleY: element.placement.scaleY,
+            opacity: element.properties.opacity || 1,
+            stroke: element.properties.stroke || undefined,
+            strokeWidth: element.properties.strokeWidth || 0,
+            rx: element.properties.rx || 0,
+            ry: element.properties.ry || 0,
             selectable: true,
           });
           element.fabricObject = rect;
@@ -952,6 +1077,15 @@ export class Store {
         default: {
           throw new Error(`Element type "${element.type}" not implemented`);
         }
+      }
+
+      // Apply opacity and border properties to all fabric objects
+      if (element.fabricObject) {
+        element.fabricObject.set({
+          opacity: element.properties.opacity || 1,
+          stroke: element.properties.stroke || undefined,
+          strokeWidth: element.properties.strokeWidth || 0,
+        });
       }
 
       if (element.fabricObject) {
