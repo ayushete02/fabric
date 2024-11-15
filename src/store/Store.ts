@@ -110,6 +110,19 @@ export class Store {
     this.setSelectedElement(selectedElement);
   }
 
+  deleteElement(id: string) {
+    this.editorElements = this.editorElements.filter(
+      (element) => element.id !== id
+    );
+
+    // Clear selection if the deleted element was selected
+    if (this.selectedElement?.id === id) {
+      this.setSelectedElement(null);
+    }
+
+    this.refreshElements();
+  }
+
   // Method to update placement properties
   updateSelectedElementPlacement(partialPlacement: Partial<Placement>) {
     if (!this.selectedElement || !this.selectedElement.fabricObject) return;
@@ -807,11 +820,15 @@ export class Store {
   }
 
   addElement(element: EditorElement) {
+    console.log(element);
     this.editorElements.push(element);
+    console.log(element);
     this.refreshElements();
+    console.log(element);
     this.setSelectedElement(
       this.editorElements[this.editorElements.length - 1]
     );
+    console.log(element);
   }
 
   setSelectedElement(selectedElement: EditorElement | null) {
@@ -912,27 +929,128 @@ export class Store {
       let fabricObject: fabric.Object | null = null;
       console.log(element);
       switch (element.type) {
-        case "rectangle":
-          fabricObject = new fabric.Rect({
-            left: element.placement.x,
-            top: element.placement.y,
-            width: element.placement.width,
-            height: element.placement.height,
-            fill: (element as any).properties.fill || "red",
-            angle: element.placement.rotation,
-            scaleX: element.placement.scaleX,
-            scaleY: element.placement.scaleY,
-            opacity: element.properties.opacity || 1,
-            stroke: element.properties.stroke || undefined,
-            strokeWidth: element.properties.strokeWidth || 0,
-            rx: element.properties.rx || 0,
-            ry: element.properties.ry || 0,
-            selectable: true,
-          });
-          element.fabricObject = rect;
-          this.canvas?.add(rect);
-          break;
+        case "shape":
+          switch (element.shapeType) {
+            case "rectangle":
+              fabricObject = new fabric.Rect({
+                left: element.placement.x,
+                top: element.placement.y,
+                width: element.placement.width,
+                height: element.placement.height,
+                fill: (element as any).properties.fill || "red",
+                angle: element.placement.rotation,
+                scaleX: element.placement.scaleX,
+                scaleY: element.placement.scaleY,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
+                rx: element.properties.rx || 0,
+                ry: element.properties.ry || 0,
+                selectable: true,
+              });
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
 
+            case "circle":
+              fabricObject = new fabric.Circle({
+                left: element.placement.x,
+                top: element.placement.y,
+                radius: element.placement.width / 2, // Assuming width is diameter
+                fill: element.properties.fill || "blue",
+                angle: element.placement.rotation,
+                scaleX: element.placement.scaleX,
+                scaleY: element.placement.scaleY,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
+                selectable: true,
+              });
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
+
+            case "triangle":
+              fabricObject = new fabric.Triangle({
+                left: element.placement.x,
+                top: element.placement.y,
+                width: element.placement.width,
+                height: element.placement.height,
+                fill: element.properties.fill || "green",
+                angle: element.placement.rotation,
+                scaleX: element.placement.scaleX,
+                scaleY: element.placement.scaleY,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
+                selectable: true,
+              });
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
+
+            case "ellipse":
+              fabricObject = new fabric.Ellipse({
+                left: element.placement.x,
+                top: element.placement.y,
+                rx: element.placement.width / 2,
+                ry: element.placement.height / 4,
+                fill: element.properties.fill || "purple",
+                angle: element.placement.rotation,
+                scaleX: element.placement.scaleX,
+                scaleY: element.placement.scaleY,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
+                selectable: true,
+              });
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
+
+            case "line":
+              fabricObject = new fabric.Line(
+                [0, 0, element.placement.width, element.placement.height],
+                {
+                  left: element.placement.x,
+                  top: element.placement.y,
+                  fill: element.properties.fill || "black",
+                  stroke: element.properties.stroke || "black",
+                  strokeWidth: element.properties.strokeWidth || 1,
+                  angle: element.placement.rotation,
+                  scaleX: element.placement.scaleX,
+                  scaleY: element.placement.scaleY,
+                  opacity: element.properties.opacity || 1,
+                  selectable: true,
+                }
+              );
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
+
+            case "polygon":
+              // Example: Triangle polygon
+              const points = [
+                { x: 0, y: 0 },
+                { x: element.placement.width, y: 0 },
+                { x: element.placement.width / 2, y: element.placement.height },
+              ];
+              fabricObject = new fabric.Polygon(points, {
+                left: element.placement.x,
+                top: element.placement.y,
+                fill: element.properties.fill || "orange",
+                angle: element.placement.rotation,
+                scaleX: element.placement.scaleX,
+                scaleY: element.placement.scaleY,
+                opacity: element.properties.opacity || 1,
+                stroke: element.properties.stroke || undefined,
+                strokeWidth: element.properties.strokeWidth || 0,
+                selectable: true,
+              });
+              element.fabricObject = fabricObject;
+              this.canvas?.add(fabricObject);
+              break;
+          }
         case "video": {
           const videoElement = document.getElementById(
             element.properties.elementId
@@ -1325,10 +1443,18 @@ export class Store {
     this.updateAudioElements();
   }
 
-  addRectangle() {
+  addRectangle = () => {
+    const shapeDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + shapeDurationMs
+        ? startTime + shapeDurationMs
+        : this.maxTime
+    );
     const rectangleElement: EditorElement = {
       id: getUid(),
-      type: "rectangle",
+      type: "shape",
+      shapeType: "rectangle",
       name: "Rectangle",
       placement: {
         x: 100,
@@ -1340,16 +1466,120 @@ export class Store {
         scaleY: 1,
       },
       timeFrame: {
-        start: 0,
-        end: 10000,
+        start: startTime,
+        end: startTime + shapeDurationMs,
       },
       properties: {
         fill: "red",
       },
     };
-
+    console.log(rectangleElement);
     this.addElement(rectangleElement);
-  }
+    console.log(rectangleElement);
+  };
+
+  addCircle = () => {
+    const shapeDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + shapeDurationMs
+        ? startTime + shapeDurationMs
+        : this.maxTime
+    );
+    const circleElement: EditorElement = {
+      id: getUid(),
+      type: "shape",
+      shapeType: "circle",
+      name: "Circle",
+      placement: {
+        x: 100,
+        y: 100,
+        width: 100, // Diameter
+        height: 100, // Diameter
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      },
+      timeFrame: {
+        start: startTime,
+        end: startTime + shapeDurationMs,
+      },
+      properties: {
+        fill: "blue",
+      },
+    };
+
+    this.addElement(circleElement);
+  };
+
+  addEllipse = () => {
+    const shapeDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + shapeDurationMs
+        ? startTime + shapeDurationMs
+        : this.maxTime
+    );
+    const ellipseElement: EditorElement = {
+      id: getUid(),
+      type: "shape",
+      shapeType: "ellipse",
+      name: "Ellipse",
+      placement: {
+        x: 100,
+        y: 100,
+        width: 100, // Diameter
+        height: 150, // Diameter
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      },
+      timeFrame: {
+        start: startTime,
+        end: startTime + shapeDurationMs,
+      },
+      properties: {
+        fill: "blue",
+      },
+    };
+
+    this.addElement(ellipseElement);
+  };
+
+  addTriangle = () => {
+    const shapeDurationMs = 5000;
+    const startTime = 0;
+    this.setMaxTime(
+      this.maxTime < startTime + shapeDurationMs
+        ? startTime + shapeDurationMs
+        : this.maxTime
+    );
+
+    const triangleElement: EditorElement = {
+      id: getUid(),
+      type: "shape",
+      shapeType: "triangle",
+      name: "Triangle",
+      placement: {
+        x: 200,
+        y: 200,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      },
+      timeFrame: {
+        start: startTime,
+        end: startTime + shapeDurationMs,
+      },
+      properties: {
+        fill: "green",
+      },
+    };
+
+    this.addElement(triangleElement);
+  };
 
   addImage(index: number) {
     const imageElement = document.getElementById(`image-${index}`);
@@ -1707,6 +1937,12 @@ export function isEditorVideoElement(
   element: EditorElement
 ): element is VideoEditorElement {
   return element.type === "video";
+}
+
+export function isEditorShapeElement(
+  element: EditorElement
+): element is VideoEditorElement {
+  return element.type === "shape";
 }
 
 export function isEditorImageElement(

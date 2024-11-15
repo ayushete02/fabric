@@ -1,5 +1,3 @@
-// In src/components/PropertiesPanel.tsx
-
 import React, { useState, useEffect } from "react";
 import { observer } from "mobx-react-lite";
 import {
@@ -41,6 +39,12 @@ const PropertiesPanel = observer(() => {
   const handleOpacityChange = (value: number) => {
     setOpacity(value); // Update local opacity state
     handlePropertiesChange("opacity", value); // Update the store
+  };
+
+  const handleDeleteElement = () => {
+    if (selectedElement) {
+      store.deleteElement(selectedElement.id);
+    }
   };
 
   return (
@@ -133,6 +137,21 @@ const PropertiesPanel = observer(() => {
           />
         </div>
 
+        {/* Fill Color */}
+        {selectedElement.type === "shape" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Fill Color
+            </label>
+            <input
+              type="color"
+              value={properties.fill || "#000000"}
+              onChange={(e) => handlePropertiesChange("fill", e.target.value)}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+        )}
+
         {/* Border */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
@@ -207,6 +226,16 @@ const PropertiesPanel = observer(() => {
             )}
           </div>
         )}
+
+        {/* Delete Element */}
+        <div>
+          <button
+            className="w-full bg-red-500 text-white rounded-md px-4 py-2 hover:bg-red-600"
+            onClick={handleDeleteElement}
+          >
+            Delete Element
+          </button>
+        </div>
       </div>
     </div>
   );

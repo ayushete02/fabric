@@ -12,6 +12,7 @@ import { fabric } from "fabric";
 import { formatTimeToMinSecMili, isHtmlImageElement } from "@/utils";
 import {
   isEditorImageElement,
+  isEditorShapeElement,
   isEditorTextElement,
   isEditorVideoElement,
 } from "@/store/Store";
@@ -162,12 +163,32 @@ const Sidebar = observer(() => {
       <h2 className="text-xl font-bold mb-4">Canvas Controls</h2>
       {!selectedElement && (
         <div className="space-y-4">
-          <button
-            className="w-full bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600"
-            onClick={store.addRectangle}
-          >
-            Add Rectangle
-          </button>
+          <div className="flex space-x-2">
+            <button
+              className="w-full bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600"
+              onClick={store.addRectangle}
+            >
+              🟩
+            </button>
+            <button
+              className="w-full bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600"
+              onClick={store.addCircle}
+            >
+              🟢
+            </button>
+            <button
+              className="w-full bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600"
+              onClick={store.addTriangle}
+            >
+              🔺
+            </button>
+            <button
+              className="w-full bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600"
+              onClick={store.addEllipse}
+            >
+              Add Ellipse
+            </button>
+          </div>
           <button
             className="w-full bg-green-500 text-white rounded-md px-4 py-2 hover:bg-green-600"
             onClick={handleAddImage}
@@ -214,15 +235,17 @@ const Sidebar = observer(() => {
       {selectedElement &&
         (isEditorImageElement(selectedElement) ||
           isEditorVideoElement(selectedElement) ||
+          isEditorShapeElement(selectedElement) ||
           isEditorTextElement(selectedElement)) && (
           <>
-            {!isEditorTextElement(selectedElement) && (
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold">Effects</h3>
+            {!isEditorTextElement(selectedElement) &&
+              !isEditorShapeElement(selectedElement) && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold">Effects</h3>
 
-                <EffectResource editorElement={selectedElement} />
-              </div>
-            )}
+                  <EffectResource editorElement={selectedElement} />
+                </div>
+              )}
             <div className="mt-6">
               <AnimationsPanel />
             </div>

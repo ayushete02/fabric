@@ -4,6 +4,14 @@ export type EditorElementBase<T extends string, P> = {
   readonly id: string;
   fabricObject?: fabric.Object;
   name: string;
+  shapeType:
+    | "rectangle"
+    | "circle"
+    | "triangle"
+    | "ellipse"
+    | "line"
+    | "polyline"
+    | "polygon";
   readonly type: T;
   placement: Placement;
   timeFrame: TimeFrame;
@@ -24,6 +32,17 @@ export type ImageEditorElement = EditorElementBase<
   "image",
   {
     src: string;
+    elementId: string;
+    imageObject?: fabric.Object;
+    effects: Effects;
+  }
+>;
+
+export type ShapeEditorElement = EditorElementBase<
+  "shape",
+  {
+    src: string;
+
     elementId: string;
     imageObject?: fabric.Object;
     effects: Effects;
@@ -56,6 +75,7 @@ export type TextEditorElement = EditorElementBase<
 export type EditorElement =
   | VideoEditorElement
   | ImageEditorElement
+  | ShapeEditorElement
   | AudioEditorElement
   | TextEditorElement;
 
